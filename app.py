@@ -2,13 +2,19 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px
 
-# Configuração da página
+# Configuração de Layout
 st.set_page_config(page_title="Dashboard de Compras", layout="wide")
 
-# Função de carregamento com cache
-@st.cache_data
+# Configuração da Planilha Google (Modo Leitura CSV)
+SHEET_ID = "1e7pQ512ge5XMnXxsRODEO7V48KgWo6FpKeITFqBSg1o"
+SHEET_NAME = "Solicitações"
+URL = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/gviz/tq?tqx=out:csv&sheet={SHEET_NAME}"
+
+# Carregamento e Tratamento dos Dados
+@st.cache_data(ttl=600)
 def carregar_dados():
-    df = pd.read_excel('data/FOLLOW UP - COMPRAS 2026.xlsx', sheet_name='Solicitações')
+    df = pd.read_csv(URL)
+    # Tratamento básico de colunas
     df['STATUS_CLEAN'] = df['STATUS'].astype(str).str.strip().str.upper()
     df['SLA'] = pd.to_numeric(df['SLA'], errors='coerce')
     df['DT EMISSAO'] = pd.to_datetime(df['DT EMISSAO'], errors='coerce')
@@ -27,31 +33,51 @@ def carregar_dados():
 
 df = carregar_dados()
 
-# Sidebar
+# Sidebar de Navegação
 st.sidebar.title("Navegação")
-secao = st.sidebar.radio("Seções:", ["Visão Geral", "Curva ABC", "Pendências"])
+secao = st.sidebar.radio("Seções do Dashboard:", ["Visão Geral", "Curva ABC", "Gestão de Pendências"])
 
+# --- SEÇÃO 1: VISÃO GERAL ---
 if secao == "Visão Geral":
-    st.title("📊 Performance Mensal")
+    st.title("📊 Dashboard de Compras - Visão Geral")
     
-    # Gráfico de barras empilhadas por mês
+    # KPIs Rápidos
+    col1, col2, col3 = st.columns(3)
+    col1.metric("Pendentes", df[df['STATUS_CLEAN'] == 'PENDENTE'].shape[0])
+    col2.metric("Fora do Prazo", df[df['CATEGORIA_PRAZO'] == 'Fora do Prazo'].shape[0])
+    col3.metric("Finalizados", df[df['STATUS_CLEAN'] == 'FINALIZADO'].shape[0])
+    
+    st.divider()
+    
+    # Gráfico Mensal
     df_mes = df.groupby(['MES', 'CATEGORIA_PRAZO']).size().reset_index(name='Qtd')
-    fig_mes = px.bar(df_mes, x='MES', y='Qtd', color='CATEGORIA_PRAZO', title="Volume de Solicitações por Status/Mês")
+    fig_mes = px.bar(df_mes, x='MES', y='Qtd', color='CATEGORIA_PRAZO', 
+                     title="Volume de Solicitações por Status Mensal", barmode='group')
     st.plotly_chart(fig_mes, use_container_width=True)
 
+# --- SEÇÃO 2: CURVA ABC ---
 elif secao == "Curva ABC":
-    st.title("📦 Curva ABC - Centros de Custo")
+    st.title("📦 Curva ABC de Centros de Custo")
     
+    # Cálculo ABC
     df_abc = df.groupby('C Custo')['Nº Solicitação (SC)'].nunique().sort_values(ascending=False).reset_index()
     df_abc['PARTICIPACAO'] = df_abc['Nº Solicitação (SC)'] / df_abc['Nº Solicitação (SC)'].sum()
     df_abc['ACUMULADO'] = df_abc['PARTICIPACAO'].cumsum()
     
-    fig_abc = px.bar(df_abc.head(10), x='C Custo', y='Nº Solicitação (SC)', title="Top 10 Centros de Custo (Volume)")
+    fig_abc = px.bar(df_abc.head(10), x='C Custo', y='Nº Solicitação (SC)', 
+                     title="Top 10 Centros de Custo por Volume", text_auto=True)
     st.plotly_chart(fig_abc, use_container_width=True)
-    st.dataframe(df_abc.head(10), use_container_width=True)
+    st.dataframe(df_abc, use_container_width=True)
 
+# --- SEÇÃO 3: GESTÃO DE PENDÊNCIAS ---
 elif secao == "Pendências":
-    st.title("⚠️ Gestão de Pendências")
-    # Filtrando pendentes (Ajuste o nome do status se necessário conforme o seu arquivo)
+    st.title("⚠️ Solicitações Pendentes (Prioridade Alta)")
+    
     pendentes = df[df['STATUS_CLEAN'] == 'PENDENTE'].sort_values(by='SLA', ascending=False)
-    st.dataframe(pendentes[['Nº Solicitação (SC)', 'Descricao', 'SLA', 'C Custo']], use_container_width=True)
+    
+    # Tabela com formatação condicional simples
+    st.dataframe(pendentes[['Nº Solicitação (SC)', 'Descricao', 'SLA', 'C Custo', 'Comprador']], 
+                 use_container_width=True)
+
+    if st.button("Atualizar Dados"):
+        st.rerun()
