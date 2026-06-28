@@ -12,19 +12,16 @@ SHEET_ID = "1e7pQ512ge5XMnXxsRODEO7V48KgWo6FpKeITFqBSg1o"
 SHEET_NAME = "Solicitações"
 URL = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/gviz/tq?tqx=out:csv&sheet={SHEET_NAME}"
 
-# Função de carregamento com tratamento de erro e encoding
 @st.cache_data(ttl=600)
 def carregar_dados():
     response = requests.get(URL)
     response.raise_for_status()
-    
-    # Decodifica corretamente os caracteres especiais da planilha
     df = pd.read_csv(io.StringIO(response.text))
     
-    # Tratamento de colunas (Garanta que os nomes abaixo existam na sua planilha)
+    # Ajuste preciso conforme cabeçalhos enviados
     df['STATUS_CLEAN'] = df['STATUS'].astype(str).str.strip().str.upper()
     df['SLA'] = pd.to_numeric(df['SLA'], errors='coerce')
-    df['DT EMISSAO'] = pd.to_datetime(df['DT EMISSAO'], errors='coerce')
+    df['DT EMISSAO'] = pd.to_datetime(df['DT Emissao'], errors='coerce')
     df['MES'] = df['DT EMISSAO'].dt.month_name()
     
     # Categorização de SLA
@@ -39,43 +36,33 @@ def carregar_dados():
     return df
 
 # Executa carregamento
-try:
-    df = carregar_dados()
-except Exception as e:
-    st.error(f"Erro ao carregar dados: {e}")
-    st.stop()
+df = carregar_dados()
 
 # Sidebar de Navegação
 st.sidebar.title("Navegação")
 secao = st.sidebar.radio("Seções do Dashboard:", ["Visão Geral", "Curva ABC", "Gestão de Pendências"])
 
-# --- SEÇÃO 1: VISÃO GERAL ---
+# --- VISÃO GERAL ---
 if secao == "Visão Geral":
     st.title("📊 Dashboard de Compras - Visão Geral")
-    
     col1, col2, col3 = st.columns(3)
     col1.metric("Pendentes", df[df['STATUS_CLEAN'] == 'PENDENTE'].shape[0])
     col2.metric("Fora do Prazo", df[df['CATEGORIA_PRAZO'] == 'Fora do Prazo'].shape[0])
     col3.metric("Finalizados", df[df['STATUS_CLEAN'] == 'FINALIZADO'].shape[0])
     
     st.divider()
-    
     df_mes = df.groupby(['MES', 'CATEGORIA_PRAZO']).size().reset_index(name='Qtd')
-    fig_mes = px.bar(df_mes, x='MES', y='Qtd', color='CATEGORIA_PRAZO', 
-                     title="Volume de Solicitações por Status Mensal", barmode='group')
+    fig_mes = px.bar(df_mes, x='MES', y='Qtd', color='CATEGORIA_PRAZO', title="Evolução Mensal", barmode='group')
     st.plotly_chart(fig_mes, use_container_width=True)
 
-# --- SEÇÃO 2: CURVA ABC ---
+# --- CURVA ABC ---
 elif secao == "Curva ABC":
     st.title("📦 Curva ABC - Centros de Custo")
-    
     df_abc = df.groupby('C Custo')['Nº Solicitação (SC)'].nunique().sort_values(ascending=False).reset_index()
-    fig_abc = px.bar(df_abc.head(10), x='C Custo', y='Nº Solicitação (SC)', 
-                     title="Top 10 Centros de Custo (Volume)", text_auto=True)
+    fig_abc = px.bar(df_abc.head(10), x='C Custo', y='Nº Solicitação (SC)', title="Top 10 Centros de Custo", text_auto=True)
     st.plotly_chart(fig_abc, use_container_width=True)
-    st.dataframe(df_abc, use_container_width=True)
 
-# --- SEÇÃO 3: PENDÊNCIAS ---
+# --- PENDÊNCIAS ---
 elif secao == "Pendências":
     st.title("⚠️ Solicitações em Aberto")
     pendentes = df[df['STATUS_CLEAN'] == 'PENDENTE'].sort_values(by='SLA', ascending=False)
