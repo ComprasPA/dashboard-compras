@@ -1,33 +1,42 @@
-
 import streamlit as st
 import pandas as pd
+import plotly.express as px
 
-# Configuração da página
 st.set_page_config(page_title="Dashboard de Compras", layout="wide")
 
-# Função para carregar dados
 @st.cache_data
 def carregar_dados():
-    # Ajuste o caminho conforme o nome do seu arquivo na pasta data/
-    df = pd.read_excel('data/FOLLOW UP - COMPRAS 2026.xlsx', sheet_name='Solicitações')
+    # Substitua pelo nome exato do arquivo que você vai subir
+    df = pd.read_excel('Solicitacoes.xlsx', sheet_name='Solicitações')
+    df['Status_Clean'] = df['Status'].astype(str).str.strip().str.upper()
+    df['SLA'] = pd.to_numeric(df['SLA'], errors='coerce')
     return df
-
-# Sidebar para navegação
-st.sidebar.title("Navegação")
-pagina = st.sidebar.radio("Escolha a seção:", ["Visão Geral", "Curva ABC", "Gestão de Pendências"])
 
 df = carregar_dados()
 
-# Lógica de navegação
-if pagina == "Visão Geral":
-    st.title("📊 Visão Geral do Setor")
-    st.write("Bem-vindo ao novo Dashboard de Compras.")
-    # Aqui inseriremos os indicadores de No Prazo, Fora do Prazo, etc.
+# Sidebar
+st.sidebar.title("Navegação")
+secao = st.sidebar.radio("Seções:", ["Visão Geral", "Curva ABC", "Pendências"])
 
-elif pagina == "Curva ABC":
-    st.title("📦 Análise Curva ABC")
-    st.write("Visualização de impacto por C.C. e Itens.")
+if secao == "Visão Geral":
+    st.title("📊 Visão Geral - Performance")
+    
+    # Lógica de Categorização
+    df['Categoria'] = pd.cut(df['SLA'], bins=[-1, 10, 15, 1000], labels=['No Prazo', 'Atenção', 'Fora do Prazo'])
+    
+    col1, col2, col3 = st.columns(3)
+    col1.metric("No Prazo", df[df['Categoria'] == 'No Prazo'].shape[0])
+    col2.metric("Atenção", df[df['Categoria'] == 'Atenção'].shape[0])
+    col3.metric("Fora do Prazo", df[df['Categoria'] == 'Fora do Prazo'].shape[0])
 
-elif pagina == "Gestão de Pendências":
-    st.title("⚠️ Solicitações em Aberto")
-    # Aqui filtraremos as pendentes por maior SLA
+elif secao == "Curva ABC":
+    st.title("📦 Curva ABC - Centros de Custo")
+    # Lógica ABC
+    df_abc = df.groupby('C Custo')['Nº Solicitação (SC)'].nunique().sort_values(ascending=False).reset_index()
+    fig = px.bar(df_abc.head(10), x='C Custo', y='Nº Solicitação (SC)', title="Top 10 Centros de Custo")
+    st.plotly_chart(fig, use_container_width=True)
+
+elif secao == "Pendências":
+    st.title("⚠️ Gestão de Pendências")
+    pendentes = df[df['Status_Clean'] == 'PENDENTE'].sort_values(by='SLA', ascending=False)
+    st.dataframe(pendentes, use_container_width=True)
