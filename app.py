@@ -89,26 +89,31 @@ with c_r:
 
 st.divider()
 
-st.subheader("⚠️ Top 10 Solicitações em Aberto")
-st.dataframe(df_f[df_f['IS_ABERTA']].sort_values('SLA', ascending=False).drop_duplicates(subset=[c_solic]).head(10)[[c_solic, c_desc, 'SLA', c_ccusto]], use_container_width=True)
+# --- TABELAS LADO A LADO ---
+col_tabela1, col_tabela2 = st.columns(2)
 
-st.divider()
+with col_tabela1:
+    st.subheader("⚠️ Top 10 Solicitações em Aberto")
+    df_top10_abertas = df_f[df_f['IS_ABERTA']].sort_values('SLA', ascending=False).drop_duplicates(subset=[c_solic]).head(10)
+    st.dataframe(df_top10_abertas[[c_solic, c_desc, 'SLA', c_ccusto]], use_container_width=True)
 
-# --- TOP 10 ITENS FILTRADO ---
-st.subheader("🛒 Top 10 Itens Mais Comprados (Volume)")
-
-df_itens = df_f.copy()
-df_itens[c_desc] = df_itens[c_desc].astype(str).str.lower()
-
-# Itens a remover:
-termos_excluidos = ['oleo comb diesel comum a granel', 'gasolina']
-
-# Filtro de exclusão
-filtro_exclusao = ~df_itens[c_desc].str.contains('|'.join(termos_excluidos), na=False)
-df_itens_filtrado = df_itens[filtro_exclusao]
-
-# Agrupa e soma
-top_itens = df_itens_filtrado.groupby(c_desc)['Qtd_Num'].sum().reset_index().sort_values(by='Qtd_Num', ascending=False).head(10)
-top_itens.columns = ['Item/Descrição', 'Quantidade Total']
-
-st.dataframe(top_itens, use_container_width=True)
+with col_tabela2:
+    st.subheader("🛒 Top 10 Itens Mais Comprados (Frequência)")
+    
+    df_itens = df_f.copy()
+    
+    # Cria uma coluna temporária em minúsculo para aplicar o filtro sem perder a formatação original
+    desc_lower = df_itens[c_desc].astype(str).str.lower()
+    
+    # Itens a remover
+    termos_excluidos = ['oleo comb diesel comum a granel', 'gasolina']
+    
+    # Aplica o filtro de exclusão
+    filtro_exclusao = ~desc_lower.str.contains('|'.join(termos_excluidos), na=False)
+    df_itens_filtrado = df_itens[filtro_exclusao]
+    
+    # Conta a frequência em que o item aparece na planilha
+    top_itens = df_itens_filtrado[c_desc].value_counts().reset_index().head(10)
+    top_itens.columns = ['Item/Descrição', 'Vezes Solicitado']
+    
+    st.dataframe(top_itens, use_container_width=True)
