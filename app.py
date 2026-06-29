@@ -176,7 +176,6 @@ with col_graf1:
     
     df_top10_abertas['Solicitação_Str'] = df_top10_abertas[c_solic].astype(str)
     
-    # Inserido "hover_data" para o gráfico capturar a descrição e "hovertemplate" para exibi-la formatada
     fig_top_solic = px.bar(
         df_top10_abertas, 
         x='SLA', 
@@ -209,11 +208,11 @@ with col_graf2:
     top_itens = df_itens[filtro_exclusao][c_desc].value_counts().reset_index().head(10)
     top_itens.columns = ['Item/Descrição', 'Vezes Solicitado']
     
-    fig_top_itens = px.bar(top_itens, x='Item/Descrição', y='Vezes Solicitado', text_auto=True, orientation='v', color_discrete_sequence=['#00c853'])
+    # Restaurado para o formato de Barras Horizontais
+    fig_top_itens = px.bar(top_itens, x='Vezes Solicitado', y='Item/Descrição', text_auto=True, orientation='h', color_discrete_sequence=['#00c853'])
     fig_top_itens.update_layout(**dark_layout)
-    fig_top_itens.update_traces(textposition='outside', textfont_size=14)
-    fig_top_itens.update_xaxes(visible=True, title="", tickangle=-45, tickfont=dict(size=10))
-    fig_top_itens.update_yaxes(visible=False, title="")
+    fig_top_itens.update_xaxes(visible=False)
+    fig_top_itens.update_yaxes(autorange="reversed", title="")
     
     st.plotly_chart(fig_top_itens, use_container_width=True)
 
@@ -231,7 +230,6 @@ if not df_cc_abertas.empty:
     
     cols_crit = [col for col in top_cc.columns if col not in [c_ccusto, 'Total Geral']]
     
-    # Retornado para gráfico de barras empilhadas e ativado 'text_auto=True' para mostrar valores em cada barra
     fig_top_cc = px.bar(
         top_cc, 
         y=c_ccusto, 
@@ -246,7 +244,6 @@ if not df_cc_abertas.empty:
     fig_top_cc.update_xaxes(visible=False)
     fig_top_cc.update_yaxes(autorange="reversed", type='category', title="")
     
-    # Ocupando 100% da tela sem estar preso em colunas estreitas
     st.plotly_chart(fig_top_cc, use_container_width=True)
 else:
     st.write("Sem registros abertos para os filtros aplicados.")
