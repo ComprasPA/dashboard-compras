@@ -193,6 +193,8 @@ if not df_cc_abertas.empty:
     top_10_cc_nomes = totais_cc.sort_values(by='Total', ascending=False).head(10)[c_ccusto].tolist()
     df_top10_cc = df_cc_abertas[df_cc_abertas[c_ccusto].isin(top_10_cc_nomes)]
     df_plot_cc = df_top10_cc.groupby([c_ccusto, c_crit])[c_solic].nunique().reset_index(name='Quantidade')
+    
+    # Prepara somatórios para anotação
     df_totals = df_plot_cc.groupby(c_ccusto)['Quantidade'].sum().reset_index()
     
     mapa_cores_crit = {}
@@ -204,10 +206,16 @@ if not df_cc_abertas.empty:
         else: mapa_cores_crit[crit] = '#ffb300'      
     
     fig_top_cc = px.bar(df_plot_cc, y=c_ccusto, x='Quantidade', color=c_crit, orientation='h', text_auto=True, custom_data=[c_crit], color_discrete_map=mapa_cores_crit)
-    for _, row in df_totals.iterrows():
-        fig_top_cc.add_annotation(y=row[c_ccusto], x=row['Quantidade'], text=f" <b>Total: {row['Quantidade']}</b>", showarrow=False, xanchor='left', font=dict(color='#ffffff', size=16))
     
-    fig_top_cc.update_layout(**dark_layout, barmode='stack')
+    # Adiciona anotação de somatório
+    for _, row in df_totals.iterrows():
+        fig_top_cc.add_annotation(
+            y=row[c_ccusto], x=row['Quantidade'],
+            text=f" <b>Total: {row['Quantidade']}</b>",
+            showarrow=False, xanchor='left', font=dict(color='#ffffff', size=16)
+        )
+
+    fig_top_cc.update_layout(**dark_layout, barmode='stack', margin=dict(t=30, b=30, l=30, r=80))
     fig_top_cc.update_traces(textfont_size=18, textposition="inside")
     fig_top_cc.update_xaxes(visible=False)
     fig_top_cc.update_yaxes(type='category', categoryorder='array', categoryarray=top_10_cc_nomes[::-1], title="", tickfont=dict(size=14))
