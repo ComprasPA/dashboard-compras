@@ -152,18 +152,16 @@ with c_l:
         st.plotly_chart(fig_p, use_container_width=True)
 
 with c_r:
+    # Retornando o Volume por Criticidade para o formato original (barra horizontal) 
+    # pois o gráfico de linha foi transferido para o Top 10 Centro de Custo como solicitado.
     st.markdown("#### Volume por Criticidade")
     crit_counts = df_sc_unicas.groupby(c_crit)[c_solic].nunique().reset_index()
-    
-    # ALTERADO: Mudança para gráfico de linhas dinâmico com marcadores nos pontos
-    fig_c = px.line(crit_counts, x=c_crit, y=c_solic, markers=True, color_discrete_sequence=['#0f62fe'])
+    fig_c = px.bar(crit_counts, y=c_crit, x=c_solic, text_auto=True, orientation='h', color_discrete_sequence=['#0f62fe'])
     
     fig_c.update_layout(**dark_layout)
-    # Estilização da linha e dos pontos marcadores
-    fig_c.update_traces(line=dict(width=4), marker=dict(size=12)) 
-    # Configuração dos eixos para exibição correta das categorias no gráfico de linhas
-    fig_c.update_xaxes(title="", tickfont=dict(size=16), showgrid=False) 
-    fig_c.update_yaxes(title="", tickfont=dict(size=16), showgrid=True, gridcolor='#2b2b40') 
+    fig_c.update_traces(textfont_size=32) 
+    fig_c.update_xaxes(visible=False) 
+    fig_c.update_yaxes(title="", tickfont=dict(size=24)) 
     
     st.plotly_chart(fig_c, use_container_width=True)
 
@@ -200,10 +198,14 @@ with col_tabela2:
     top_itens = df_itens[filtro_exclusao][c_desc].value_counts().reset_index().head(10)
     top_itens.columns = ['Item/Descrição', 'Vezes Solicitado']
     
-    fig_top_itens = px.bar(top_itens, x='Vezes Solicitado', y='Item/Descrição', text_auto=True, orientation='h', color_discrete_sequence=['#00c853'])
+    # AJUSTE: Formato de Histograma Vertical (barras verticais) para as frequências
+    fig_top_itens = px.bar(top_itens, x='Item/Descrição', y='Vezes Solicitado', text_auto=True, orientation='v', color_discrete_sequence=['#00c853'])
     fig_top_itens.update_layout(**dark_layout)
-    fig_top_itens.update_xaxes(visible=False)
-    fig_top_itens.update_yaxes(autorange="reversed", title="")
+    fig_top_itens.update_traces(textposition='outside', textfont_size=14)
+    # Mostra o eixo inferior e inclina o nome dos itens para caberem bem na tela
+    fig_top_itens.update_xaxes(visible=True, title="", tickangle=-45, tickfont=dict(size=10))
+    fig_top_itens.update_yaxes(visible=False, title="") # Oculta o eixo Y para um visual mais limpo
+    
     st.plotly_chart(fig_top_itens, use_container_width=True)
     
     st.dataframe(top_itens, use_container_width=True)
@@ -223,10 +225,15 @@ with col_tabela3:
         top_cc = top_cc.sort_values(by='Total Geral', ascending=False).head(10).reset_index()
         
         cols_crit = [col for col in top_cc.columns if col not in [c_ccusto, 'Total Geral']]
-        fig_top_cc = px.bar(top_cc, y=c_ccusto, x=cols_crit, orientation='h', color_discrete_sequence=['#0f62fe', '#ffb300', '#e91e63'])
-        fig_top_cc.update_layout(**dark_layout, barmode='stack')
-        fig_top_cc.update_xaxes(visible=False)
-        fig_top_cc.update_yaxes(autorange="reversed", type='category', title="")
+        
+        # AJUSTE CRÍTICO: Gráfico de linhas aplicado aos Centros de Custo
+        fig_top_cc = px.line(top_cc, x=c_ccusto, y=cols_crit, markers=True, color_discrete_sequence=['#0f62fe', '#ffb300', '#e91e63'])
+        
+        fig_top_cc.update_layout(**dark_layout)
+        fig_top_cc.update_traces(line=dict(width=3), marker=dict(size=8))
+        fig_top_cc.update_xaxes(title="", tickangle=-45, tickfont=dict(size=12))
+        fig_top_cc.update_yaxes(title="Volume", tickfont=dict(size=12), showgrid=True, gridcolor='#2b2b40')
+        
         st.plotly_chart(fig_top_cc, use_container_width=True)
         
         st.dataframe(top_cc, use_container_width=True)
