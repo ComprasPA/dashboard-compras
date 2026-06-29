@@ -80,7 +80,16 @@ def carregar_dados():
     df.loc[df['IS_ABERTA'] & (df['SLA'] > 15), 'CATEGORIA_COR'] = 'FORA DO PRAZO'
 
     df['ANO'] = df['DT_DT'].dt.year
-    df['MES_NOME'] = df['DT_DT'].dt.month_name()
+    
+    # Dicionário de tradução dos meses para Português BR
+    mapa_meses = {
+        'January': 'Janeiro', 'February': 'Fevereiro', 'March': 'Março',
+        'April': 'Abril', 'May': 'Maio', 'June': 'Junho',
+        'July': 'Julho', 'August': 'Agosto', 'September': 'Setembro',
+        'October': 'Outubro', 'November': 'Novembro', 'December': 'Dezembro'
+    }
+    df['MES_NOME'] = df['DT_DT'].dt.month_name().map(mapa_meses)
+    
     return df, c_pedido, c_solic, c_ccusto, c_desc, c_crit, c_emissao
 
 df_full, c_pedido, c_solic, c_ccusto, c_desc, c_crit, c_emissao = carregar_dados()
@@ -90,7 +99,9 @@ colunas_exibir = [col for col in [c_solic, c_desc, c_ccusto, c_crit, c_emissao, 
 st.sidebar.title("Filtros")
 anos_disp = sorted(df_full['ANO'].dropna().unique())
 ano_sel = st.sidebar.multiselect("Ano:", anos_disp, default=anos_disp)
-meses_todos = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December']
+
+# Lista de meses corrigida para Português BR
+meses_todos = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro']
 mes_sel = st.sidebar.multiselect("Mês:", meses_todos, default=meses_todos)
 cc_sel = st.sidebar.multiselect("Centro de Custo:", sorted(df_full[c_ccusto].dropna().unique().tolist()))
 
