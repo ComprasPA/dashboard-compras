@@ -156,11 +156,13 @@ with c_r:
     crit_counts = df_sc_unicas.groupby(c_crit)[c_solic].nunique().reset_index()
     fig_c = px.bar(crit_counts, y=c_crit, x=c_solic, text_auto=True, orientation='h', color_discrete_sequence=['#0f62fe'])
     
-    # Aumentando o tamanho da fonte do gráfico de barras
     fig_c.update_layout(**dark_layout)
-    fig_c.update_traces(textfont_size=16) # Aumenta os números dentro/fora das barras
-    fig_c.update_xaxes(showgrid=False, title="", tickfont=dict(size=14)) # Aumenta a fonte do eixo X
-    fig_c.update_yaxes(title="", tickfont=dict(size=14)) # Aumenta a fonte do eixo Y
+    # Dobrando o tamanho da fonte (de 16 para 32)
+    fig_c.update_traces(textfont_size=32) 
+    # Removendo o eixo inferior (eixo X) completamente
+    fig_c.update_xaxes(visible=False) 
+    # Aumentando o texto do eixo Y para equilibrar o visual
+    fig_c.update_yaxes(title="", tickfont=dict(size=24)) 
     
     st.plotly_chart(fig_c, use_container_width=True)
 
