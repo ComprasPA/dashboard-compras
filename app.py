@@ -9,10 +9,10 @@ import io
 st.set_page_config(page_title="Dashboard Executivo", layout="wide", initial_sidebar_state="expanded")
 
 # --- FUNÇÃO DO POP-UP (MODAL) ---
-@st.dialog("📋 Detalhes dos Registros", width="large")
+@st.dialog("📋 Detalhes das Solicitações", width="large")
 def abrir_modal(df_filtrado):
-    st.write(f"**Total de registros encontrados:** {len(df_filtrado)}")
-    st.dataframe(df_filtrado, use_container_width=True)
+    st.write(f"**Total de solicitações únicas encontradas:** {len(df_filtrado)}")
+    st.dataframe(df_filtrado, use_container_width=True, hide_index=True)
 
 # --- CUSTOM CSS (ESTILO DARK E CARDS NEON) ---
 st.markdown("""
@@ -32,7 +32,7 @@ st.markdown("""
         font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
     }
     
-    /* Cores dos Cards */
+    /* Cores dos Cards iguais à imagem */
     .card-blue { background: linear-gradient(135deg, #0f62fe 0%, #0033a0 100%); }
     .card-green { background: linear-gradient(135deg, #00c853 0%, #009624 100%); }
     .card-pink { background: linear-gradient(135deg, #e91e63 0%, #ad1457 100%); }
@@ -89,9 +89,12 @@ def carregar_dados():
 
     df['ANO'] = df['DT_DT'].dt.year
     df['MES_NOME'] = df['DT_DT'].dt.month_name()
-    return df, c_pedido, c_solic, c_ccusto, c_desc, c_crit
+    return df, c_pedido, c_solic, c_ccusto, c_desc, c_crit, c_emissao
 
-df_full, c_pedido, c_solic, c_ccusto, c_desc, c_crit = carregar_dados()
+df_full, c_pedido, c_solic, c_ccusto, c_desc, c_crit, c_emissao = carregar_dados()
+
+# Colunas que serão exibidas no modal para evitar poluição visual
+colunas_exibir = [col for col in [c_solic, c_desc, c_ccusto, c_crit, c_emissao, 'SLA'] if col is not None]
 
 # --- FILTROS ---
 st.sidebar.title("Filtros")
@@ -203,9 +206,11 @@ with col_graf1:
     
     evento_solic = st.plotly_chart(fig_top_solic, use_container_width=True, on_select="rerun")
     if evento_solic and len(evento_solic.selection.get("points", [])) > 0:
-        id_clicado = evento_solic.selection["points"][0]["y"]
-        df_detalhe = df_full[df_full[c_solic].astype(str) == str(id_clicado)]
-        abrir_modal(df_detalhe)
+        id_clicado = str(evento_solic.selection["points"][0]["y"]).strip()
+        # Filtro estrito para garantir match exato e sem colunas extras
+        df_detalhe = df_full[df_full[c_solic].astype(str).str.strip() == id_clicado]
+        df_detalhe_unico = df_detalhe.drop_duplicates(subset=[c_solic])
+        abrir_modal(df_detalhe_unico[colunas_exibir])
 
 with col_graf2:
     st.markdown("#### 🛒 Top 10 Itens Mais Comprados (Frequência)")
@@ -226,30 +231,27 @@ with col_graf2:
     
     evento_item = st.plotly_chart(fig_top_itens, use_container_width=True, on_select="rerun")
     if evento_item and len(evento_item.selection.get("points", [])) > 0:
-        nome_item_clicado = evento_item.selection["points"][0]["y"]
-        df_detalhe = df_f[df_f[c_desc].astype(str) == str(nome_item_clicado)]
-        abrir_modal(df_detalhe)
+        nome_item_clicado = str(evento_item.selection["points"][0]["y"]).strip()
+        df_detalhe = df_f[df_f[c_desc].astype(str).str.strip() == nome_item_clicado]
+        df_detalhe_unico = df_detalhe.drop_duplicates(subset=[c_solic])
+        abrir_modal(df_detalhe_unico[colunas_exibir])
 
 st.markdown("<hr style='border-color: #2b2b40;'>", unsafe_allow_html=True)
 
-# --- GRÁFICO INFERIOR (CORREÇÃO DA INTERATIVIDADE E FILTROS COMPATÍVEIS) ---
+# --- GRÁFICO INFERIOR (FILTRO ESTRITO POR CC E CRITICIDADE) ---
 st.markdown("#### 🏢 Top 10 Centros de Custo (Sol. Abertas por Criticidade)")
 
 df_cc_abertas = df_f[df_f['IS_ABERTA']].copy()
 
 if not df_cc_abertas.empty:
-    # 1. Identificar o ranking real dos 10 maiores CCs baseados em solicitações únicas
     df_unicas_cc = df_cc_abertas.drop_duplicates(subset=[c_solic])
     totais_cc = df_unicas_cc.groupby(c_ccusto)[c_solic].nunique().reset_index(name='Total')
     top_10_cc_nomes = totais_cc.sort_values(by='Total', ascending=False).head(10)[c_ccusto].tolist()
     
-    # 2. Filtrar a base para conter apenas esses 10 Centros de Custo principais
     df_top10_cc = df_cc_abertas[df_cc_abertas[c_ccusto].isin(top_10_cc_nomes)]
     
-    # 3. Agrupar no formato longo mantendo a Criticidade como coluna de dados explícita
     df_plot_cc = df_top10_cc.groupby([c_ccusto, c_crit])[c_solic].nunique().reset_index(name='Quantidade')
     
-    # 4. Mapeamento robusto de cores dinâmicas
     mapa_cores_crit = {}
     for crit in df_plot_cc[c_crit].unique():
         crit_str = str(crit).lower().strip()
@@ -262,7 +264,6 @@ if not df_cc_abertas.empty:
         else:
             mapa_cores_crit[crit] = '#ffb300'      
     
-    # 5. Construção do gráfico com injeção da criticidade em custom_data para captura no clique
     fig_top_cc = px.bar(
         df_plot_cc, 
         y=c_ccusto, 
@@ -270,32 +271,37 @@ if not df_cc_abertas.empty:
         color=c_crit,
         orientation='h', 
         text_auto=True,
-        custom_data=[c_crit],
+        custom_data=[c_crit], # Custom data garantindo o transporte exato do nome da criticidade
         color_discrete_map=mapa_cores_crit
     )
     
     fig_top_cc.update_layout(**dark_layout, barmode='stack')
     fig_top_cc.update_traces(textfont_size=18, textposition="inside")
     fig_top_cc.update_xaxes(visible=False)
-    
-    # Força a ordenação visual correta do ranking Top 10 de cima para baixo
     fig_top_cc.update_yaxes(type='category', categoryorder='array', categoryarray=top_10_cc_nomes[::-1], title="", tickfont=dict(size=14))
     
     evento_cc = st.plotly_chart(fig_top_cc, use_container_width=True, on_select="rerun")
     
-    # 6. Captura cirúrgica do clique cruzando CC + Criticidade da Barra
     if evento_cc and len(evento_cc.selection.get("points", [])) > 0:
         ponto_selecionado = evento_cc.selection["points"][0]
-        cc_clicado = ponto_selecionado["y"]
-        crit_clicada = ponto_selecionado["customdata"][0] 
+        
+        # O ".strip()" remove espaços invisíveis que quebram o filtro
+        cc_clicado = str(ponto_selecionado["y"]).strip()
+        crit_clicada = str(ponto_selecionado["customdata"][0]).strip()
         
         if cc_clicado and crit_clicada:
-            # Filtra a aba original trazendo os itens pendentes daquela combinação específica
+            # Filtro perfeitamente isolado cruzando Centro de Custo, Criticidade e Abertas
             df_detalhe = df_f[
-                (df_f[c_ccusto].astype(str) == str(cc_clicado)) & 
-                (df_f[c_crit].astype(str) == str(crit_clicada)) & 
+                (df_f[c_ccusto].astype(str).str.strip() == cc_clicado) & 
+                (df_f[c_crit].astype(str).str.strip() == crit_clicada) & 
                 (df_f['IS_ABERTA'])
             ]
-            abrir_modal(df_detalhe)
+            
+            # Removemos a duplicata de itens no mesmo pedido para que o número do pop-up
+            # bata 100% com o número desenhado na barra do gráfico
+            df_detalhe_unico = df_detalhe.drop_duplicates(subset=[c_solic])
+            
+            # Exibe no Pop-Up apenas as colunas informativas da aba de Solicitação
+            abrir_modal(df_detalhe_unico[colunas_exibir])
 else:
     st.write("Sem registros abertos para os filtros aplicados.")
