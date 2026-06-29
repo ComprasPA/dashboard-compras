@@ -22,23 +22,17 @@ def carregar_dados():
     response.raise_for_status()
     df = pd.read_csv(io.StringIO(response.text))
     
-    # Padronização
     df['STATUS_CLEAN'] = df['STATUS'].astype(str).str.strip().str.upper()
     df['SLA'] = pd.to_numeric(df['SLA'], errors='coerce').fillna(0)
     df['DT EMISSAO'] = pd.to_datetime(df['DT Emissao'], errors='coerce')
-    
-    # Lógica: Aberta = Sem número de pedido
     df['IS_ABERTA'] = df['Nº Pedido (PC)'].isna() | (df['Nº Pedido (PC)'].astype(str) == 'nan')
     
-    def categorizar(row):
-        if not row['IS_ABERTA']: return 'FINALIZADO'
-        sla = row['SLA']
-        if sla == 0: return 'ATENÇÃO'
-        if sla < 10: return 'NO PRAZO'
-        if sla <= 15: return 'ATENÇÃO'
-        return 'FORA DO PRAZO'
+    df['CATEGORIA_COR'] = 'ATENÇÃO' # Valor default
+    df.loc[~df['IS_ABERTA'], 'CATEGORIA_COR'] = 'FINALIZADO'
+    df.loc[df['IS_ABERTA'] & (df['SLA'] < 10), 'CATEGORIA_COR'] = 'NO PRAZO'
+    df.loc[df['IS_ABERTA'] & (df['SLA'] >= 10) & (df['SLA'] <= 15), 'CATEGORIA_COR'] = 'ATENÇÃO'
+    df.loc[df['IS_ABERTA'] & (df['SLA'] > 15), 'CATEGORIA_COR'] = 'FORA DO PRAZO'
     
-    df['CATEGORIA_COR'] = df.apply(categorizar, axis=1)
     df['MES_NOME'] = df['DT EMISSAO'].dt.month_name().map({
         'January': 'Janeiro', 'February': 'Fevereiro', 'March': 'Março', 'April': 'Abril',
         'May': 'Maio', 'June': 'Junho', 'July': 'Julho', 'August': 'Agosto',
@@ -50,7 +44,7 @@ def carregar_dados():
 df_full = carregar_dados()
 
 # --- FILTROS ---
-st.sidebar.header("Filtros Dinâmicos")
+st.sidebar.header("Filtros de Visão")
 anos_disp = sorted(df_full['ANO'].dropna().unique())
 ano_sel = st.sidebar.multiselect("Ano:", anos_disp, default=anos_disp)
 mes_sel = st.sidebar.multiselect("Mês:", ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'], 
@@ -62,9 +56,7 @@ if ano_sel: df_f = df_f[df_f['ANO'].isin(ano_sel)]
 if mes_sel: df_f = df_f[df_f['MES_NOME'].isin(mes_sel)]
 if cc_sel: df_f = df_f[df_f['C Custo'].isin(cc_sel)]
 
-# --- CÁLCULO DE REGISTROS ÚNICOS ---
-# Removemos duplicatas de SC mantendo o maior SLA encontrado para cada SC
-df_sc_unicas = df_f.sort_values('SLA', ascending=False).drop_duplicates(subset=['Nº Solicitação (SC)'])
+df_sc_unicas = df_f.drop_duplicates(subset=['Nº Solicitação (SC)'])
 
 # --- DASHBOARD ---
 st.title("📊 Dashboard Executivo de Compras")
@@ -77,6 +69,7 @@ col4.metric("SLA Médio (Abertas)", round(df_sc_unicas[df_sc_unicas['IS_ABERTA']
 
 st.divider()
 
+# Gráficos (Baseados no Filtro)
 c_l, c_r = st.columns(2)
 with c_l:
     st.subheader("Distribuição de Status")
@@ -85,23 +78,20 @@ with c_l:
                                    marker=dict(colors=[CORES_STATUS.get(x, '#ccc') for x in status_counts.index]),
                                    textinfo='percent+label', hole=0.3)])
     st.plotly_chart(fig_p, use_container_width=True)
-    
     cols_s = st.columns(len(status_counts))
-    for i, (status, qtd) in enumerate(status_counts.items()):
-        cols_s[i].metric(status, qtd)
+    for i, (status, qtd) in enumerate(status_counts.items()): cols_s[i].metric(status, qtd)
 
 with c_r:
     st.subheader("Volume por Criticidade")
-    crit_counts = df_sc_unicas.groupby('Criticidade')['Nº Solicitação (SC)'].nunique()
-    fig_c = px.bar(crit_counts.reset_index(), x='Criticidade', y='Nº Solicitação (SC)', text_auto=True)
+    fig_c = px.bar(df_sc_unicas.groupby('Criticidade')['Nº Solicitação (SC)'].nunique().reset_index(), 
+                   x='Criticidade', y='Nº Solicitação (SC)', text_auto=True)
     st.plotly_chart(fig_c, use_container_width=True)
-    
-    cols_c = st.columns(len(crit_counts))
-    for i, (crit, qtd) in enumerate(crit_counts.items()):
-        cols_c[i].metric(str(crit), qtd)
+    cols_c = st.columns(len(df_sc_unicas.groupby('Criticidade')))
+    for i, (crit, qtd) in enumerate(df_sc_unicas.groupby('Criticidade')['Nº Solicitação (SC)'].nunique().items()): cols_c[i].metric(str(crit), qtd)
 
+# TOP 10 FIXO (Sem filtros de data)
 st.divider()
-st.subheader("⚠️ Top 10 Solicitações em Aberto (Maiores SLAs)")
-# Agora filtramos a base única apenas pelas abertas e ordenamos
-df_top10 = df_sc_unicas[df_sc_unicas['IS_ABERTA']].sort_values(by='SLA', ascending=False).head(10)
+st.subheader("⚠️ Top 10 Solicitações em Aberto (Maior SLA Global)")
+# Aqui usamos df_full (base bruta) e aplicamos apenas o filtro de "Aberta" e "Duplicadas"
+df_top10 = df_full[df_full['IS_ABERTA']].sort_values('SLA', ascending=False).drop_duplicates(subset=['Nº Solicitação (SC)']).head(10)
 st.dataframe(df_top10[['Nº Solicitação (SC)', 'Descricao', 'SLA', 'C Custo', 'Comprador']], use_container_width=True)
