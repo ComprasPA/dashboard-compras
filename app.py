@@ -104,13 +104,11 @@ df_sc_unicas = df_f.drop_duplicates(subset=[c_solic])
 # --- DASHBOARD HEADER ---
 st.markdown("<h3>Análise Executiva de Compras</h3>", unsafe_allow_html=True)
 
-# Valores para os Cards
 v_pedidos = df_sc_unicas[c_pedido].nunique()
 v_fechadas = df_sc_unicas[~df_sc_unicas['IS_ABERTA']].shape[0]
 v_abertas = df_sc_unicas[df_sc_unicas['IS_ABERTA']].shape[0]
 v_sla = round(df_sc_unicas[df_sc_unicas['IS_ABERTA']]['SLA'].mean(), 1)
 
-# Renderização dos Cards HTML personalizados
 col1, col2, col3, col4 = st.columns(4)
 col1.markdown(f'<div class="metric-card card-blue"><div class="metric-title">Pedidos Emitidos</div><div class="metric-value">{v_pedidos}</div></div>', unsafe_allow_html=True)
 col2.markdown(f'<div class="metric-card card-green"><div class="metric-title">Sol. Fechadas</div><div class="metric-value">{v_fechadas}</div></div>', unsafe_allow_html=True)
@@ -120,7 +118,6 @@ col4.markdown(f'<div class="metric-card card-purple"><div class="metric-title">S
 # --- GRÁFICOS ---
 c_l, c_r = st.columns(2)
 
-# Configuração global de layout para gráficos Plotly (Dark Mode)
 dark_layout = dict(
     paper_bgcolor='rgba(0,0,0,0)', 
     plot_bgcolor='rgba(0,0,0,0)',
@@ -131,14 +128,29 @@ dark_layout = dict(
 with c_l:
     st.markdown("#### Distribuição de Status")
     status_counts = df_sc_unicas['CATEGORIA_COR'].value_counts()
-    fig_p = go.Figure(data=[go.Pie(labels=status_counts.index, values=status_counts.values, marker=dict(colors=[CORES_STATUS.get(x, '#888') for x in status_counts.index]), hole=0.4)])
+    
+    # Adicionado textinfo='label+value' e ajuste de fonte para trazer os números de volta ao gráfico
+    fig_p = go.Figure(data=[go.Pie(
+        labels=status_counts.index, 
+        values=status_counts.values, 
+        marker=dict(colors=[CORES_STATUS.get(x, '#888') for x in status_counts.index]), 
+        textinfo='label+value',
+        textfont=dict(color='white', size=14),
+        hole=0.4
+    )])
+    
     fig_p.update_layout(**dark_layout)
     st.plotly_chart(fig_p, use_container_width=True)
+    
+    # Mantém os números detalhados abaixo do gráfico
+    if len(status_counts) > 0:
+        cols_s = st.columns(len(status_counts))
+        for i, (status, qtd) in enumerate(status_counts.items()): 
+            cols_s[i].metric(status, qtd)
 
 with c_r:
     st.markdown("#### Volume por Criticidade")
     crit_counts = df_sc_unicas.groupby(c_crit)[c_solic].nunique().reset_index()
-    # Gráfico de barras horizontal para lembrar o estilo da imagem
     fig_c = px.bar(crit_counts, y=c_crit, x=c_solic, text_auto=True, orientation='h', color_discrete_sequence=['#0f62fe'])
     fig_c.update_layout(**dark_layout)
     fig_c.update_xaxes(showgrid=False, title="")
@@ -156,7 +168,6 @@ with col_tabela1:
     df_abertas_global['SLA'] = pd.to_numeric(df_abertas_global['SLA'], errors='coerce').fillna(0)
     df_top10_abertas = df_abertas_global.sort_values(by='SLA', ascending=False).drop_duplicates(subset=[c_solic]).head(10)
     
-    # Exibe tabela (O Streamlit adapta cores de tabela ao tema automaticamente se configurado no app)
     st.dataframe(df_top10_abertas[[c_solic, c_desc, 'SLA', c_ccusto]], use_container_width=True)
 
 with col_tabela2:
