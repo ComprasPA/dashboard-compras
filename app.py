@@ -69,7 +69,6 @@ df_unicos = df_filtrado.drop_duplicates(subset=['Nº Solicitação (SC)'])
 # --- DASHBOARD ---
 st.title("📊 Dashboard Executivo de Compras")
 
-# Métricas
 col1, col2, col3, col4 = st.columns(4)
 col1.metric("Pedidos Emitidos", df_unicos[df_unicos['Nº Pedido (PC)'].notna()]['Nº Pedido (PC)'].nunique())
 col2.metric("Sol. Fechadas", df_unicos[df_unicos['STATUS_CLEAN'] == 'FINALIZADO'].shape[0])
@@ -78,7 +77,6 @@ col4.metric("SLA Médio (Dias)", round(df_unicos['SLA'].mean(), 1))
 
 st.divider()
 
-# Gráficos
 c_left, c_right = st.columns(2)
 with c_left:
     st.subheader("Distribuição de Status")
@@ -94,17 +92,8 @@ with c_right:
                       x='Criticidade', y='Nº Solicitação (SC)', text_auto=True)
     st.plotly_chart(fig_crit, use_container_width=True)
 
-# Top 10 SLA
+# Top 10 SLA (Apenas Tabela)
 st.divider()
 st.subheader("⚠️ Top 10 Solicitações com Maior SLA")
-df_pendentes = df_unicos[~df_unicos['STATUS_CLEAN'].str.contains('FINALIZADO', na=False)].sort_values(by='SLA', ascending=False).head(10)
-
-if not df_pendentes.empty:
-    fig_top10 = px.bar(df_pendentes, x='SLA', y='Nº Solicitação (SC)', orientation='h',
-                       color='CATEGORIA_COR', color_discrete_map=CORES_STATUS, text='SLA',
-                       title="Solicitações com maior tempo de espera")
-    fig_top10.update_layout(yaxis={'categoryorder':'total ascending'})
-    st.plotly_chart(fig_top10, use_container_width=True)
-    st.dataframe(df_pendentes[['Nº Solicitação (SC)', 'Descricao', 'SLA', 'C Custo', 'Comprador']], use_container_width=True)
-else:
-    st.info("Nenhuma solicitação em aberto encontrada.")
+df_top10 = df_unicos[~df_unicos['STATUS_CLEAN'].str.contains('FINALIZADO', na=False)].sort_values(by='SLA', ascending=False).head(10)
+st.dataframe(df_top10[['Nº Solicitação (SC)', 'Descricao', 'SLA', 'C Custo', 'Comprador']], use_container_width=True)
