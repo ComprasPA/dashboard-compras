@@ -165,7 +165,7 @@ with c_r:
 
 st.markdown("<hr style='border-color: #2b2b40;'>", unsafe_allow_html=True)
 
-# --- TABELAS ---
+# --- TABELAS QUADRANTE SUPERIOR ---
 col_tabela1, col_tabela2 = st.columns(2)
 
 with col_tabela1:
@@ -191,18 +191,23 @@ with col_tabela2:
 
 st.markdown("<hr style='border-color: #2b2b40;'>", unsafe_allow_html=True)
 
-# --- NOVA TABELA: CENTROS DE CUSTO ---
+# --- TABELAS QUADRANTE INFERIOR ---
 col_tabela3, col_tabela4 = st.columns(2)
 
 with col_tabela3:
-    st.markdown("#### 🏢 Top 10 Centros de Custo (Sol. Abertas)")
+    st.markdown("#### 🏢 Top 10 Centros de Custo (Sol. Abertas por Criticidade)")
     
-    # Filtra apenas solicitações em aberto baseadas no dataframe com os filtros aplicados
-    df_cc_abertas = df_f[df_f['IS_ABERTA']].copy()
+    # Isola dados abertos consolidados de forma única por solicitação
+    df_cc_abertas = df_f[df_f['IS_ABERTA']].drop_duplicates(subset=[c_solic]).copy()
     
-    # Agrupa por Centro de Custo e conta as solicitações únicas
-    top_cc = df_cc_abertas.groupby(c_ccusto)[c_solic].nunique().reset_index()
-    top_cc = top_cc.sort_values(by=c_solic, ascending=False).head(10)
-    top_cc.columns = ['Centro de Custo', 'Qtd Sol. Abertas']
-    
-    st.dataframe(top_cc, use_container_width=True)
+    if not df_cc_abertas.empty:
+        # Cruza centros de custo com criticidade abrindo colunas dinâmicas (unstack)
+        top_cc = df_cc_abertas.groupby([c_ccusto, c_crit])[c_solic].nunique().unstack(fill_value=0)
+        
+        # Consolida coluna totalizadora estrutural para determinar ranking
+        top_cc['Total Geral'] = top_cc.sum(axis=1)
+        top_cc = top_cc.sort_values(by='Total Geral', ascending=False).head(10).reset_index()
+        
+        st.dataframe(top_cc, use_container_width=True)
+    else:
+        st.write("Sem registros abertos para os filtros aplicados.")
