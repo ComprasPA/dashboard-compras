@@ -5,7 +5,7 @@ import plotly.graph_objects as go
 import requests
 import io
 
-st.set_page_config(page_title="Dashboard de Compras", layout="wide")
+st.set_page_config(page_title="Dashboard Executivo", layout="wide")
 
 SHEET_ID = "1e7pQ512ge5XMnXxsRODEO7V48KgWo6FpKeITFqBSg1o"
 SHEET_NAME = "Solicitações"
@@ -27,7 +27,7 @@ def carregar_dados():
     df['DT EMISSAO'] = pd.to_datetime(df['DT Emissao'], errors='coerce')
     df['IS_ABERTA'] = df['Nº Pedido (PC)'].isna() | (df['Nº Pedido (PC)'].astype(str) == 'nan')
     
-    df['CATEGORIA_COR'] = 'ATENÇÃO' # Valor default
+    df['CATEGORIA_COR'] = 'ATENÇÃO'
     df.loc[~df['IS_ABERTA'], 'CATEGORIA_COR'] = 'FINALIZADO'
     df.loc[df['IS_ABERTA'] & (df['SLA'] < 10), 'CATEGORIA_COR'] = 'NO PRAZO'
     df.loc[df['IS_ABERTA'] & (df['SLA'] >= 10) & (df['SLA'] <= 15), 'CATEGORIA_COR'] = 'ATENÇÃO'
@@ -69,7 +69,6 @@ col4.metric("SLA Médio (Abertas)", round(df_sc_unicas[df_sc_unicas['IS_ABERTA']
 
 st.divider()
 
-# Gráficos (Baseados no Filtro)
 c_l, c_r = st.columns(2)
 with c_l:
     st.subheader("Distribuição de Status")
@@ -83,15 +82,31 @@ with c_l:
 
 with c_r:
     st.subheader("Volume por Criticidade")
-    fig_c = px.bar(df_sc_unicas.groupby('Criticidade')['Nº Solicitação (SC)'].nunique().reset_index(), 
-                   x='Criticidade', y='Nº Solicitação (SC)', text_auto=True)
+    crit_counts = df_sc_unicas.groupby('Criticidade')['Nº Solicitação (SC)'].nunique()
+    fig_c = px.bar(crit_counts.reset_index(), x='Criticidade', y='Nº Solicitação (SC)', text_auto=True)
     st.plotly_chart(fig_c, use_container_width=True)
-    cols_c = st.columns(len(df_sc_unicas.groupby('Criticidade')))
-    for i, (crit, qtd) in enumerate(df_sc_unicas.groupby('Criticidade')['Nº Solicitação (SC)'].nunique().items()): cols_c[i].metric(str(crit), qtd)
+    cols_c = st.columns(len(crit_counts))
+    for i, (crit, qtd) in enumerate(crit_counts.items()): cols_c[i].metric(str(crit), qtd)
 
-# TOP 10 FIXO (Sem filtros de data)
+# Top 10 SLA GLOBAL
 st.divider()
 st.subheader("⚠️ Top 10 Solicitações em Aberto (Maior SLA Global)")
-# Aqui usamos df_full (base bruta) e aplicamos apenas o filtro de "Aberta" e "Duplicadas"
 df_top10 = df_full[df_full['IS_ABERTA']].sort_values('SLA', ascending=False).drop_duplicates(subset=['Nº Solicitação (SC)']).head(10)
 st.dataframe(df_top10[['Nº Solicitação (SC)', 'Descricao', 'SLA', 'C Custo', 'Comprador']], use_container_width=True)
+
+# NOVOS RANKINGS (Filtro Mensal)
+st.divider()
+col_rank1, col_rank2 = st.columns(2)
+
+with col_rank1:
+    st.subheader("🏆 Top 10 Fornecedores (Pedidos Fechados)")
+    df_fornecedores = df_f[df_f['Nº Pedido (PC)'].notna()].drop_duplicates(subset=['Nº Pedido (PC)'])
+    top_forn = df_fornecedores['Fornecedor'].value_counts().head(10).reset_index()
+    top_forn.columns = ['Fornecedor', 'Qtd Pedidos']
+    st.dataframe(top_forn, use_container_width=True)
+
+with col_rank2:
+    st.subheader("🛒 Top 10 Itens Mais Comprados")
+    top_itens = df_f['Descricao'].value_counts().head(10).reset_index()
+    top_itens.columns = ['Item/Descrição', 'Qtd Comprada']
+    st.dataframe(top_itens, use_container_width=True)
