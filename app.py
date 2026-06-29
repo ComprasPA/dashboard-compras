@@ -154,12 +154,16 @@ with c_l:
 with c_r:
     st.markdown("#### Volume por Criticidade")
     crit_counts = df_sc_unicas.groupby(c_crit)[c_solic].nunique().reset_index()
-    fig_c = px.bar(crit_counts, y=c_crit, x=c_solic, text_auto=True, orientation='h', color_discrete_sequence=['#0f62fe'])
+    
+    # ALTERADO: Mudança para gráfico de linhas dinâmico com marcadores nos pontos
+    fig_c = px.line(crit_counts, x=c_crit, y=c_solic, markers=True, color_discrete_sequence=['#0f62fe'])
     
     fig_c.update_layout(**dark_layout)
-    fig_c.update_traces(textfont_size=32) 
-    fig_c.update_xaxes(visible=False) 
-    fig_c.update_yaxes(title="", tickfont=dict(size=24)) 
+    # Estilização da linha e dos pontos marcadores
+    fig_c.update_traces(line=dict(width=4), marker=dict(size=12)) 
+    # Configuração dos eixos para exibição correta das categorias no gráfico de linhas
+    fig_c.update_xaxes(title="", tickfont=dict(size=16), showgrid=False) 
+    fig_c.update_yaxes(title="", tickfont=dict(size=16), showgrid=True, gridcolor='#2b2b40') 
     
     st.plotly_chart(fig_c, use_container_width=True)
 
@@ -174,16 +178,12 @@ with col_tabela1:
     df_abertas_global['SLA'] = pd.to_numeric(df_abertas_global['SLA'], errors='coerce').fillna(0)
     df_top10_abertas = df_abertas_global.sort_values(by='SLA', ascending=False).drop_duplicates(subset=[c_solic]).head(10)
     
-    # CORREÇÃO CRÍTICA AQUI: Forçar a coluna de solicitação a ser interpretada como STRING (Texto)
-    # Isso impede que o Plotly tente criar um eixo Y matemático/numérico
     df_top10_abertas['Solicitação_Str'] = df_top10_abertas[c_solic].astype(str)
     
-    # Eixo X é o SLA. Eixo Y é a Solicitação em formato texto.
     fig_top_solic = px.bar(df_top10_abertas, x='SLA', y='Solicitação_Str', text='SLA', orientation='h', color_discrete_sequence=['#e91e63'])
     fig_top_solic.update_layout(**dark_layout)
     fig_top_solic.update_traces(textposition='inside', textfont_size=14)
     fig_top_solic.update_xaxes(visible=False)
-    # Força o tipo do eixo para 'category' para garantir a ordem exata do Top 10
     fig_top_solic.update_yaxes(autorange="reversed", type='category', title="")
     st.plotly_chart(fig_top_solic, use_container_width=True)
     
