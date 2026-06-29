@@ -5,13 +5,50 @@ import plotly.graph_objects as go
 import requests
 import io
 
-st.set_page_config(page_title="Dashboard Executivo", layout="wide")
+# Configuração da Página
+st.set_page_config(page_title="Dashboard Executivo", layout="wide", initial_sidebar_state="expanded")
+
+# --- CUSTOM CSS (ESTILO DARK E CARDS NEON) ---
+st.markdown("""
+<style>
+    /* Fundo da tela principal */
+    .stApp {
+        background-color: #13152a;
+    }
+    
+    /* Estilo base dos Cards */
+    .metric-card {
+        padding: 20px;
+        border-radius: 10px;
+        color: white;
+        box-shadow: 0 4px 8px rgba(0,0,0,0.4);
+        margin-bottom: 20px;
+        font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    }
+    
+    /* Cores dos Cards iguais à imagem */
+    .card-blue { background: linear-gradient(135deg, #0f62fe 0%, #0033a0 100%); }
+    .card-green { background: linear-gradient(135deg, #00c853 0%, #009624 100%); }
+    .card-pink { background: linear-gradient(135deg, #e91e63 0%, #ad1457 100%); }
+    .card-purple { background: linear-gradient(135deg, #7c4dff 0%, #4527a0 100%); }
+    
+    /* Textos dos Cards */
+    .metric-title { font-size: 16px; font-weight: 500; margin-bottom: 10px; opacity: 0.9; }
+    .metric-value { font-size: 36px; font-weight: bold; margin: 0; }
+    
+    /* Ajustes gerais de texto para branco */
+    h1, h2, h3, h4, p, label { color: #ffffff !important; }
+    
+    /* Fundo dos painéis e sidebar */
+    [data-testid="stSidebar"] { background-color: #1b1d36; }
+</style>
+""", unsafe_allow_html=True)
 
 SHEET_ID = "1e7pQ512ge5XMnXxsRODEO7V48KgWo6FpKeITFqBSg1o"
 SHEET_NAME = "Solicitações"
 URL = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/gviz/tq?tqx=out:csv&sheet={SHEET_NAME}"
 
-CORES_STATUS = {'FINALIZADO': '#28a745', 'ATENÇÃO': '#ffc107', 'FORA DO PRAZO': '#dc3545', 'NO PRAZO': '#007bff'}
+CORES_STATUS = {'FINALIZADO': '#00c853', 'ATENÇÃO': '#ffb300', 'FORA DO PRAZO': '#e91e63', 'NO PRAZO': '#0f62fe'}
 
 @st.cache_data(ttl=600)
 def carregar_dados():
@@ -51,82 +88,86 @@ def carregar_dados():
 df_full, c_pedido, c_solic, c_ccusto, c_desc, c_crit = carregar_dados()
 
 # --- FILTROS ---
-st.sidebar.header("Filtros de Visão")
+st.sidebar.title("Filtros")
 anos_disp = sorted(df_full['ANO'].dropna().unique())
 ano_sel = st.sidebar.multiselect("Ano:", anos_disp, default=anos_disp)
 meses_todos = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December']
 mes_sel = st.sidebar.multiselect("Mês:", meses_todos, default=meses_todos)
 cc_sel = st.sidebar.multiselect("Centro de Custo:", sorted(df_full[c_ccusto].dropna().unique().tolist()))
 
-# df_f É A BASE FILTRADA (USADA NOS GRÁFICOS E RANKING DE ITENS)
 df_f = df_full.copy()
 if ano_sel: df_f = df_f[df_f['ANO'].isin(ano_sel)]
 if mes_sel: df_f = df_f[df_f['MES_NOME'].isin(mes_sel)]
 if cc_sel: df_f = df_f[df_f[c_ccusto].isin(cc_sel)]
 df_sc_unicas = df_f.drop_duplicates(subset=[c_solic])
 
-# --- DASHBOARD ---
-st.title("📊 Dashboard Executivo de Compras")
+# --- DASHBOARD HEADER ---
+st.markdown("<h3>Análise Executiva de Compras</h3>", unsafe_allow_html=True)
 
+# Valores para os Cards
+v_pedidos = df_sc_unicas[c_pedido].nunique()
+v_fechadas = df_sc_unicas[~df_sc_unicas['IS_ABERTA']].shape[0]
+v_abertas = df_sc_unicas[df_sc_unicas['IS_ABERTA']].shape[0]
+v_sla = round(df_sc_unicas[df_sc_unicas['IS_ABERTA']]['SLA'].mean(), 1)
+
+# Renderização dos Cards HTML personalizados
 col1, col2, col3, col4 = st.columns(4)
-col1.metric("Pedidos Emitidos", df_sc_unicas[c_pedido].nunique())
-col2.metric("Sol. Fechadas", df_sc_unicas[~df_sc_unicas['IS_ABERTA']].shape[0])
-col3.metric("Sol. Abertas", df_sc_unicas[df_sc_unicas['IS_ABERTA']].shape[0])
-col4.metric("SLA Médio (Abertas)", round(df_sc_unicas[df_sc_unicas['IS_ABERTA']]['SLA'].mean(), 1))
+col1.markdown(f'<div class="metric-card card-blue"><div class="metric-title">Pedidos Emitidos</div><div class="metric-value">{v_pedidos}</div></div>', unsafe_allow_html=True)
+col2.markdown(f'<div class="metric-card card-green"><div class="metric-title">Sol. Fechadas</div><div class="metric-value">{v_fechadas}</div></div>', unsafe_allow_html=True)
+col3.markdown(f'<div class="metric-card card-pink"><div class="metric-title">Sol. Abertas</div><div class="metric-value">{v_abertas}</div></div>', unsafe_allow_html=True)
+col4.markdown(f'<div class="metric-card card-purple"><div class="metric-title">SLA Médio (Abertas)</div><div class="metric-value">{v_sla} dias</div></div>', unsafe_allow_html=True)
 
-st.divider()
-
+# --- GRÁFICOS ---
 c_l, c_r = st.columns(2)
+
+# Configuração global de layout para gráficos Plotly (Dark Mode)
+dark_layout = dict(
+    paper_bgcolor='rgba(0,0,0,0)', 
+    plot_bgcolor='rgba(0,0,0,0)',
+    font=dict(color='#ffffff'),
+    margin=dict(t=30, b=30, l=30, r=30)
+)
+
 with c_l:
-    st.subheader("Distribuição de Status")
+    st.markdown("#### Distribuição de Status")
     status_counts = df_sc_unicas['CATEGORIA_COR'].value_counts()
-    fig_p = go.Figure(data=[go.Pie(labels=status_counts.index, values=status_counts.values, marker=dict(colors=[CORES_STATUS.get(x, '#ccc') for x in status_counts.index]), hole=0.3)])
+    fig_p = go.Figure(data=[go.Pie(labels=status_counts.index, values=status_counts.values, marker=dict(colors=[CORES_STATUS.get(x, '#888') for x in status_counts.index]), hole=0.4)])
+    fig_p.update_layout(**dark_layout)
     st.plotly_chart(fig_p, use_container_width=True)
-    
-    # Retornando os números abaixo do gráfico de pizza
-    if len(status_counts) > 0:
-        cols_s = st.columns(len(status_counts))
-        for i, (status, qtd) in enumerate(status_counts.items()): 
-            cols_s[i].metric(status, qtd)
 
 with c_r:
-    st.subheader("Volume por Criticidade")
-    crit_counts = df_sc_unicas.groupby(c_crit)[c_solic].nunique()
-    fig_c = px.bar(crit_counts.reset_index(), x=c_crit, y=c_solic, text_auto=True)
+    st.markdown("#### Volume por Criticidade")
+    crit_counts = df_sc_unicas.groupby(c_crit)[c_solic].nunique().reset_index()
+    # Gráfico de barras horizontal para lembrar o estilo da imagem
+    fig_c = px.bar(crit_counts, y=c_crit, x=c_solic, text_auto=True, orientation='h', color_discrete_sequence=['#0f62fe'])
+    fig_c.update_layout(**dark_layout)
+    fig_c.update_xaxes(showgrid=False, title="")
+    fig_c.update_yaxes(title="")
     st.plotly_chart(fig_c, use_container_width=True)
-    
-    # Retornando os números abaixo do gráfico de barras
-    if len(crit_counts) > 0:
-        cols_c = st.columns(len(crit_counts))
-        for i, (crit, qtd) in enumerate(crit_counts.items()): 
-            cols_c[i].metric(str(crit), qtd)
 
-st.divider()
+st.markdown("<hr style='border-color: #2b2b40;'>", unsafe_allow_html=True)
 
-# --- TABELAS LADO A LADO ---
+# --- TABELAS ---
 col_tabela1, col_tabela2 = st.columns(2)
 
 with col_tabela1:
-    st.subheader("⚠️ Top 10 Solicitações em Aberto (Global)")
-    
+    st.markdown("#### ⚠️ Top 10 Solicitações em Aberto (Global)")
     df_abertas_global = df_full[df_full['IS_ABERTA']].copy()
     df_abertas_global['SLA'] = pd.to_numeric(df_abertas_global['SLA'], errors='coerce').fillna(0)
     df_top10_abertas = df_abertas_global.sort_values(by='SLA', ascending=False).drop_duplicates(subset=[c_solic]).head(10)
     
+    # Exibe tabela (O Streamlit adapta cores de tabela ao tema automaticamente se configurado no app)
     st.dataframe(df_top10_abertas[[c_solic, c_desc, 'SLA', c_ccusto]], use_container_width=True)
 
 with col_tabela2:
-    st.subheader("🛒 Top 10 Itens Mais Comprados (Frequência)")
-    
+    st.markdown("#### 🛒 Top 10 Itens Mais Comprados (Frequência)")
     df_itens = df_f.copy()
     desc_lower = df_itens[c_desc].astype(str).str.lower()
     
     termos_excluidos = ['oleo comb diesel comum a granel', 'gasolina', 'serviço', 'servico', 'serv']
-    
     filtro_exclusao = ~desc_lower.str.contains('|'.join(termos_excluidos), na=False)
-    df_itens_filtrado = df_itens[filtro_exclusao]
     
-    top_itens = df_itens_filtrado[c_desc].value_counts().reset_index().head(10)
+    top_itens = df_itens[filtro_exclusao][c_desc].value_counts().reset_index().head(10)
     top_itens.columns = ['Item/Descrição', 'Vezes Solicitado']
     
     st.dataframe(top_itens, use_container_width=True)
