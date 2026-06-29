@@ -77,6 +77,8 @@ st.divider()
 
 # Gráficos
 c_l, c_r = st.columns(2)
+
+# Coluna Esquerda: Pizza + Quantidades
 with c_l:
     st.subheader("Distribuição de Status")
     status_counts = df_sc_unicas['CATEGORIA_COR'].value_counts()
@@ -85,17 +87,22 @@ with c_l:
                                    textinfo='percent+label', hole=0.3)])
     st.plotly_chart(fig_p, use_container_width=True)
     
-    # NOVAS MÉTRICAS DE QUANTIDADE ABAIXO DO GRÁFICO
     st.write("### Quantidade por Status")
     cols_status = st.columns(len(status_counts))
     for i, (status, qtd) in enumerate(status_counts.items()):
         cols_status[i].metric(status, qtd)
 
+# Coluna Direita: Barras + Quantidades
 with c_r:
     st.subheader("Volume por Criticidade")
-    fig_c = px.bar(df_sc_unicas.groupby('Criticidade')['Nº Solicitação (SC)'].nunique().reset_index(), 
-                   x='Criticidade', y='Nº Solicitação (SC)', text_auto=True)
+    crit_counts = df_sc_unicas.groupby('Criticidade')['Nº Solicitação (SC)'].nunique()
+    fig_c = px.bar(crit_counts.reset_index(), x='Criticidade', y='Nº Solicitação (SC)', text_auto=True)
     st.plotly_chart(fig_c, use_container_width=True)
+    
+    st.write("### Quantidade por Criticidade")
+    cols_crit = st.columns(len(crit_counts))
+    for i, (crit, qtd) in enumerate(crit_counts.items()):
+        cols_crit[i].metric(str(crit), qtd)
 
 # Top 10 ABERTAS
 st.divider()
