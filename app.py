@@ -32,7 +32,7 @@ st.markdown("""
         font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
     }
     
-    /* Cores dos Cards iguais à imagem */
+    /* Cores dos Cards */
     .card-blue { background: linear-gradient(135deg, #0f62fe 0%, #0033a0 100%); }
     .card-green { background: linear-gradient(135deg, #00c853 0%, #009624 100%); }
     .card-pink { background: linear-gradient(135deg, #e91e63 0%, #ad1457 100%); }
@@ -232,57 +232,65 @@ with col_graf2:
 
 st.markdown("<hr style='border-color: #2b2b40;'>", unsafe_allow_html=True)
 
-# --- GRÁFICO INFERIOR (INTERATIVIDADE INTERNA POR SÉRIE) ---
+# --- GRÁFICO INFERIOR (CORREÇÃO DA INTERATIVIDADE E FILTROS COMPATÍVEIS) ---
 st.markdown("#### 🏢 Top 10 Centros de Custo (Sol. Abertas por Criticidade)")
 
-df_cc_abertas = df_f[df_f['IS_ABERTA']].drop_duplicates(subset=[c_solic]).copy()
+df_cc_abertas = df_f[df_f['IS_ABERTA']].copy()
 
 if not df_cc_abertas.empty:
-    top_cc = df_cc_abertas.groupby([c_ccusto, c_crit])[c_solic].nunique().unstack(fill_value=0)
-    top_cc['Total Geral'] = top_cc.sum(axis=1)
-    top_cc = top_cc.sort_values(by='Total Geral', ascending=False).head(10).reset_index()
+    # 1. Identificar o ranking real dos 10 maiores CCs baseados em solicitações únicas
+    df_unicas_cc = df_cc_abertas.drop_duplicates(subset=[c_solic])
+    totais_cc = df_unicas_cc.groupby(c_ccusto)[c_solic].nunique().reset_index(name='Total')
+    top_10_cc_nomes = totais_cc.sort_values(by='Total', ascending=False).head(10)[c_ccusto].tolist()
     
-    cols_crit = [col for col in top_cc.columns if col not in [c_ccusto, 'Total Geral']]
+    # 2. Filtrar a base para conter apenas esses 10 Centros de Custo principais
+    df_top10_cc = df_cc_abertas[df_cc_abertas[c_ccusto].isin(top_10_cc_nomes)]
     
+    # 3. Agrupar no formato longo mantendo a Criticidade como coluna de dados explícita
+    df_plot_cc = df_top10_cc.groupby([c_ccusto, c_crit])[c_solic].nunique().reset_index(name='Quantidade')
+    
+    # 4. Mapeamento robusto de cores dinâmicas
     mapa_cores_crit = {}
-    for col in cols_crit:
-        col_str = str(col).lower().strip()
-        if 'direta' in col_str:
-            mapa_cores_crit[col] = '#00c853'      
-        elif 'emergencial' in col_str:
-            mapa_cores_crit[col] = '#e91e63'   
-        elif 'rotineira' in col_str:
-            mapa_cores_crit[col] = '#0f62fe'      
+    for crit in df_plot_cc[c_crit].unique():
+        crit_str = str(crit).lower().strip()
+        if 'direta' in crit_str:
+            mapa_cores_crit[crit] = '#00c853'      
+        elif 'emerg' in crit_str:
+            mapa_cores_crit[crit] = '#e91e63'   
+        elif 'rotin' in crit_str:
+            mapa_cores_crit[crit] = '#0f62fe'      
         else:
-            mapa_cores_crit[col] = '#ffb300'      
+            mapa_cores_crit[crit] = '#ffb300'      
     
+    # 5. Construção do gráfico com injeção da criticidade em custom_data para captura no clique
     fig_top_cc = px.bar(
-        top_cc, 
+        df_plot_cc, 
         y=c_ccusto, 
-        x=cols_crit, 
+        x='Quantidade', 
+        color=c_crit,
         orientation='h', 
         text_auto=True,
+        custom_data=[c_crit],
         color_discrete_map=mapa_cores_crit
     )
     
     fig_top_cc.update_layout(**dark_layout, barmode='stack')
     fig_top_cc.update_traces(textfont_size=18, textposition="inside")
     fig_top_cc.update_xaxes(visible=False)
-    fig_top_cc.update_yaxes(autorange="reversed", type='category', title="", tickfont=dict(size=14))
+    
+    # Força a ordenação visual correta do ranking Top 10 de cima para baixo
+    fig_top_cc.update_yaxes(type='category', categoryorder='array', categoryarray=top_10_cc_nomes[::-1], title="", tickfont=dict(size=14))
     
     evento_cc = st.plotly_chart(fig_top_cc, use_container_width=True, on_select="rerun")
     
-    # Lógica de extração do clique baseada na série selecionada
+    # 6. Captura cirúrgica do clique cruzando CC + Criticidade da Barra
     if evento_cc and len(evento_cc.selection.get("points", [])) > 0:
         ponto_selecionado = evento_cc.selection["points"][0]
         cc_clicado = ponto_selecionado["y"]
-        curve_idx = ponto_selecionado.get("curveNumber", 0) # Captura qual índice de série foi clicado
+        crit_clicada = ponto_selecionado["customdata"][0] 
         
-        # Mapeia o índice de volta para a coluna correspondente de criticidade
-        if curve_idx < len(cols_crit):
-            crit_clicada = cols_crit[curve_idx]
-            
-            # Filtra os dados originais trazendo o cruzamento do CC com a Criticidade exata
+        if cc_clicado and crit_clicada:
+            # Filtra a aba original trazendo os itens pendentes daquela combinação específica
             df_detalhe = df_f[
                 (df_f[c_ccusto].astype(str) == str(cc_clicado)) & 
                 (df_f[c_crit].astype(str) == str(crit_clicada)) & 
