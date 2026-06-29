@@ -184,7 +184,7 @@ with col_graf2:
 
 st.markdown("<hr style='border-color: #2b2b40;'>", unsafe_allow_html=True)
 
-# --- GRÁFICO INFERIOR ---
+# --- GRÁFICO INFERIOR (CORRIGIDO) ---
 st.markdown("#### 🏢 Top 10 Centros de Custo (Sol. Abertas por Criticidade)")
 df_cc_abertas = df_f[df_f['IS_ABERTA']].copy()
 if not df_cc_abertas.empty:
@@ -203,17 +203,23 @@ if not df_cc_abertas.empty:
         elif 'rotin' in crit_str: mapa_cores_crit[crit] = '#0f62fe'      
         else: mapa_cores_crit[crit] = '#ffb300'      
     
-    fig_top_cc = px.bar(df_plot_cc, y=c_ccusto, x='Quantidade', color=c_crit, orientation='h', text_auto=True, custom_data=[c_crit], color_discrete_map=mapa_cores_crit)
+    fig_top_cc = px.bar(df_plot_cc, y=c_ccusto, x='Quantidade', color=c_crit, orientation='h', custom_data=[c_crit], color_discrete_map=mapa_cores_crit)
     
     for _, row in df_totals.iterrows():
-        fig_top_cc.add_annotation(y=row[c_ccusto], x=row['Quantidade'], text=f" <b>Total: {row['Quantidade']}</b>", showarrow=False, xanchor='left', font=dict(color='#ffffff', size=16))
+        fig_top_cc.add_annotation(y=row[c_ccusto], x=row['Quantidade'], text=f" <b>Total: {row['Quantidade']}</b>", showarrow=False, xanchor='left', xshift=10, font=dict(color='#ffffff', size=14))
     
-    fig_top_cc.update_layout(**dark_layout, barmode='stack')
-    fig_top_cc.update_traces(textfont_size=18, textposition="inside")
-    fig_top_cc.update_xaxes(visible=False)
+    # Ajuste de layout e margens corrigido
+    fig_top_cc.update_layout(
+        paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', font=dict(color='#ffffff'),
+        barmode='stack', margin=dict(t=30, b=30, l=30, r=120),
+        xaxis=dict(showgrid=False, showline=False, zeroline=False, range=[0, df_totals['Quantidade'].max() * 1.4])
+    )
+    
+    fig_top_cc.update_traces(textfont_size=14, textposition="inside")
     fig_top_cc.update_yaxes(type='category', categoryorder='array', categoryarray=top_10_cc_nomes[::-1], title="", tickfont=dict(size=14))
     
     evento_cc = st.plotly_chart(fig_top_cc, use_container_width=True, on_select="rerun", config={'displayModeBar': False})
+    
     if evento_cc and len(evento_cc.selection.get("points", [])) > 0:
         ponto_selecionado = evento_cc.selection["points"][0]
         cc_clicado = str(ponto_selecionado["y"]).strip()
