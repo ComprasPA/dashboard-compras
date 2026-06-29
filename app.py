@@ -25,16 +25,18 @@ def carregar_dados():
     response.raise_for_status()
     df = pd.read_csv(io.StringIO(response.text))
     
-    # Tratamentos
+    # Tratamentos de colunas
     df['STATUS_CLEAN'] = df['STATUS'].astype(str).str.strip().str.upper()
-    df['SLA'] = pd.to_numeric(df['SLA'], errors='coerce')
+    
+    # Forçar conversão de SLA para numérico e tratar erros
+    df['SLA'] = pd.to_numeric(df['SLA'], errors='coerce').fillna(0)
     df['DT EMISSAO'] = pd.to_datetime(df['DT Emissao'], errors='coerce')
     
     def categorizar(row):
         status = row['STATUS_CLEAN']
         sla = row['SLA']
         if status == 'FINALIZADO': return 'FINALIZADO'
-        if pd.isna(sla): return 'ATENÇÃO'
+        if sla == 0: return 'ATENÇÃO'
         if sla < 10: return 'NO PRAZO'
         if sla <= 15: return 'ATENÇÃO'
         return 'FORA DO PRAZO'
@@ -52,8 +54,10 @@ df_full = carregar_dados()
 
 # --- BARRA LATERAL ---
 st.sidebar.header("Filtros Dinâmicos")
-ano_sel = st.sidebar.multiselect("Ano:", sorted(df_full['ANO'].dropna().unique()), default=sorted(df_full['ANO'].dropna().unique()))
-mes_sel = st.sidebar.multiselect("Mês:", ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'], default=['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'])
+anos_disponiveis = sorted(df_full['ANO'].dropna().unique())
+ano_sel = st.sidebar.multiselect("Ano:", anos_disponiveis, default=anos_disponiveis)
+mes_sel = st.sidebar.multiselect("Mês:", ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'], 
+                                 default=['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'])
 cc_sel = st.sidebar.multiselect("Centro de Custo:", sorted(df_full['C Custo'].dropna().unique().tolist()))
 status_sel = st.sidebar.multiselect("Status:", list(CORES_STATUS.keys()))
 
@@ -69,6 +73,7 @@ df_unicos = df_filtrado.drop_duplicates(subset=['Nº Solicitação (SC)'])
 # --- DASHBOARD ---
 st.title("📊 Dashboard Executivo de Compras")
 
+# Métricas
 col1, col2, col3, col4 = st.columns(4)
 col1.metric("Pedidos Emitidos", df_unicos[df_unicos['Nº Pedido (PC)'].notna()]['Nº Pedido (PC)'].nunique())
 col2.metric("Sol. Fechadas", df_unicos[df_unicos['STATUS_CLEAN'] == 'FINALIZADO'].shape[0])
@@ -77,6 +82,7 @@ col4.metric("SLA Médio (Dias)", round(df_unicos['SLA'].mean(), 1))
 
 st.divider()
 
+# Gráficos
 c_left, c_right = st.columns(2)
 with c_left:
     st.subheader("Distribuição de Status")
@@ -92,13 +98,18 @@ with c_right:
                       x='Criticidade', y='Nº Solicitação (SC)', text_auto=True)
     st.plotly_chart(fig_crit, use_container_width=True)
 
-# Top 10 SLA ABERTAS (Corrigido para evitar duplicidade)
+# Top 10 SLA (Tabela Forçada)
 st.divider()
 st.subheader("⚠️ Top 10 Solicitações em Aberto (Maiores SLAs)")
 
-# Agrupa por SC pegando o SLA máximo para garantir exclusividade e valor real
-df_top10 = df_unicos[~df_unicos['STATUS_CLEAN'].str.contains('FINALIZADO', na=False)].copy()
-df_top10 = df_top10.groupby(['Nº Solicitação (SC)', 'Descricao', 'C Custo', 'Comprador'])['SLA'].max().reset_index()
+# Agrupamento para evitar duplicidade de SCs e garantir que o SLA máximo seja capturado
+df_top10 = df_unicos.groupby(['Nº Solicitação (SC)', 'Descricao', 'C Custo', 'Comprador'])['SLA'].max().reset_index()
+
+# Ordenação pelo SLA
 df_top10 = df_top10.sort_values(by='SLA', ascending=False).head(10)
 
+# Exibição
 st.dataframe(df_top10, use_container_width=True)
+
+if df_top10.empty:
+    st.warning("Nenhum dado encontrado para exibir. Verifique os filtros na barra lateral.")
