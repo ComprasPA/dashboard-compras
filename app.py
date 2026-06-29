@@ -218,7 +218,7 @@ with col_graf2:
 
 st.markdown("<hr style='border-color: #2b2b40;'>", unsafe_allow_html=True)
 
-# --- GRÁFICO INFERIOR ---
+# --- GRÁFICO INFERIOR (CORREÇÃO DO MAPEAMENTO DINÂMICO CORES) ---
 st.markdown("#### 🏢 Top 10 Centros de Custo (Sol. Abertas por Criticidade)")
 
 df_cc_abertas = df_f[df_f['IS_ABERTA']].drop_duplicates(subset=[c_solic]).copy()
@@ -230,15 +230,18 @@ if not df_cc_abertas.empty:
     
     cols_crit = [col for col in top_cc.columns if col not in [c_ccusto, 'Total Geral']]
     
-    # Mapeamento para garantir que as variações de "compras direta" fiquem verdes
-    mapa_cores_crit = {
-        'compras direta': '#00c853',
-        'Compras Direta': '#00c853',
-        'COMPRAS DIRETA': '#00c853',
-        'compra direta': '#00c853',
-        'Compra Direta': '#00c853',
-        'COMPRA DIRETA': '#00c853'
-    }
+    # CORREÇÃO DEFINITIVA: Mapeamento dinâmico baseado em varredura de strings parciais
+    mapa_cores_crit = {}
+    for col in cols_crit:
+        col_str = str(col).lower().strip()
+        if 'direta' in col_str:
+            mapa_cores_crit[col] = '#00c853'      # Verde para compras direta
+        elif 'emergencial' in col_str:
+            mapa_cores_crit[col] = '#e91e63'   # Rosa para emergenciais
+        elif 'rotineira' in col_str:
+            mapa_cores_crit[col] = '#0f62fe'      # Azul para rotineiras
+        else:
+            mapa_cores_crit[col] = '#ffb300'      # Amarelo/Atenção para outros casos
     
     fig_top_cc = px.bar(
         top_cc, 
@@ -246,8 +249,7 @@ if not df_cc_abertas.empty:
         x=cols_crit, 
         orientation='h', 
         text_auto=True,
-        color_discrete_map=mapa_cores_crit,
-        color_discrete_sequence=['#0f62fe', '#ffb300', '#e91e63'] # Cores padrão para o restante
+        color_discrete_map=mapa_cores_crit
     )
     
     fig_top_cc.update_layout(**dark_layout, barmode='stack')
