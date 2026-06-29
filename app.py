@@ -82,11 +82,24 @@ with c_l:
     status_counts = df_sc_unicas['CATEGORIA_COR'].value_counts()
     fig_p = go.Figure(data=[go.Pie(labels=status_counts.index, values=status_counts.values, marker=dict(colors=[CORES_STATUS.get(x, '#ccc') for x in status_counts.index]), hole=0.3)])
     st.plotly_chart(fig_p, use_container_width=True)
+    
+    # Retornando os números abaixo do gráfico de pizza
+    if len(status_counts) > 0:
+        cols_s = st.columns(len(status_counts))
+        for i, (status, qtd) in enumerate(status_counts.items()): 
+            cols_s[i].metric(status, qtd)
 
 with c_r:
     st.subheader("Volume por Criticidade")
-    fig_c = px.bar(df_sc_unicas.groupby(c_crit)[c_solic].nunique().reset_index(), x=c_crit, y=c_solic, text_auto=True)
+    crit_counts = df_sc_unicas.groupby(c_crit)[c_solic].nunique()
+    fig_c = px.bar(crit_counts.reset_index(), x=c_crit, y=c_solic, text_auto=True)
     st.plotly_chart(fig_c, use_container_width=True)
+    
+    # Retornando os números abaixo do gráfico de barras
+    if len(crit_counts) > 0:
+        cols_c = st.columns(len(crit_counts))
+        for i, (crit, qtd) in enumerate(crit_counts.items()): 
+            cols_c[i].metric(str(crit), qtd)
 
 st.divider()
 
@@ -108,7 +121,6 @@ with col_tabela2:
     df_itens = df_f.copy()
     desc_lower = df_itens[c_desc].astype(str).str.lower()
     
-    # Atualização: Filtro de exclusão abrange combustível e todos os serviços
     termos_excluidos = ['oleo comb diesel comum a granel', 'gasolina', 'serviço', 'servico', 'serv']
     
     filtro_exclusao = ~desc_lower.str.contains('|'.join(termos_excluidos), na=False)
