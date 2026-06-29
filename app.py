@@ -8,6 +8,11 @@ import io
 # Configuração da Página
 st.set_page_config(page_title="Dashboard Executivo", layout="wide", initial_sidebar_state="expanded")
 
+# --- INICIALIZAÇÃO DE CHAVES DE CONTROLE DE SELEÇÃO ---
+if "solic_key" not in st.session_state: st.session_state.solic_key = 0
+if "item_key" not in st.session_state: st.session_state.item_key = 0
+if "cc_key" not in st.session_state: st.session_state.cc_key = 0
+
 # --- FUNÇÃO DO POP-UP (MODAL) ---
 @st.dialog("📋 Detalhes das Solicitações", width="large")
 def abrir_modal(df_filtrado):
@@ -154,11 +159,14 @@ with col_graf1:
     fig_top_solic.update_xaxes(visible=False)
     fig_top_solic.update_yaxes(autorange="reversed", type='category', title="", tickfont=dict(size=14))
     
-    evento_solic = st.plotly_chart(fig_top_solic, use_container_width=True, on_select="rerun", config={'displayModeBar': False})
+    evento_solic = st.plotly_chart(fig_top_solic, use_container_width=True, on_select="rerun", config={'displayModeBar': False}, key=f"solic_{st.session_state.solic_key}")
     if evento_solic and len(evento_solic.selection.get("points", [])) > 0:
         id_clicado = str(evento_solic.selection["points"][0]["y"]).strip()
         df_detalhe = df_full[df_full[c_solic].astype(str).str.strip() == id_clicado]
-        abrir_modal(df_detalhe.drop_duplicates(subset=[c_solic])[colunas_exibir])
+        st.session_state.df_modal = df_detalhe.drop_duplicates(subset=[c_solic])[colunas_exibir]
+        st.session_state.abrir_modal = True
+        st.session_state.solic_key += 1
+        st.rerun()
 
 with col_graf2:
     st.markdown("#### 🛒 Top 10 Itens Mais Comprados (Frequência)")
@@ -176,15 +184,18 @@ with col_graf2:
     fig_top_itens.update_xaxes(visible=False)
     fig_top_itens.update_yaxes(autorange="reversed", title="", tickfont=dict(size=14))
     
-    evento_item = st.plotly_chart(fig_top_itens, use_container_width=True, on_select="rerun", config={'displayModeBar': False})
+    evento_item = st.plotly_chart(fig_top_itens, use_container_width=True, on_select="rerun", config={'displayModeBar': False}, key=f"item_{st.session_state.item_key}")
     if evento_item and len(evento_item.selection.get("points", [])) > 0:
         nome_item_clicado = str(evento_item.selection["points"][0]["y"]).strip()
         df_detalhe = df_f[df_f[c_desc].astype(str).str.strip() == nome_item_clicado]
-        abrir_modal(df_detalhe.drop_duplicates(subset=[c_solic])[colunas_exibir])
+        st.session_state.df_modal = df_detalhe.drop_duplicates(subset=[c_solic])[colunas_exibir]
+        st.session_state.abrir_modal = True
+        st.session_state.item_key += 1
+        st.rerun()
 
 st.markdown("<hr style='border-color: #2b2b40;'>", unsafe_allow_html=True)
 
-# --- GRÁFICO INFERIOR (COM ORDENAÇÃO DE BARRAS) ---
+# --- GRÁFICO INFERIOR ---
 st.markdown("#### 🏢 Top 10 Centros de Custo (Sol. Abertas por Criticidade)")
 df_cc_abertas = df_f[df_f['IS_ABERTA']].copy()
 if not df_cc_abertas.empty:
@@ -200,50 +211,38 @@ if not df_cc_abertas.empty:
         if 'direta' in crit_str: mapa_cores_crit[crit] = '#00c853'      
         elif 'emerg' in crit_str: mapa_cores_crit[crit] = '#e91e63'   
         elif 'rotin' in crit_str: mapa_cores_crit[crit] = '#0f62fe'      
-        else: mapa_cores_crit[crit] = '#ffb300' # Correção de Processo fica com tom amarelado/laranja
+        else: mapa_cores_crit[crit] = '#ffb300'      
         
-    # LOGICA DE ORDENAÇÃO FORÇADA
     todas_crits = df_plot_cc[c_crit].unique().tolist()
     ordem_desejada = []
-    
-    # 1. Compras direta
     ordem_desejada.extend([c for c in todas_crits if 'direta' in str(c).lower()])
-    # 2. Correção de processo
     ordem_desejada.extend([c for c in todas_crits if 'corre' in str(c).lower() or 'process' in str(c).lower()])
-    # 3. Emergencial
     ordem_desejada.extend([c for c in todas_crits if 'emerg' in str(c).lower()])
-    # 4. Rotineira
     ordem_desejada.extend([c for c in todas_crits if 'rotin' in str(c).lower()])
     
-    # Adiciona eventuais criticidades que escaparam da regra acima
     for c in todas_crits:
-        if c not in ordem_desejada:
-            ordem_desejada.append(c)
+        if c not in ordem_desejada: ordem_desejada.append(c)
     
-    # Geração do gráfico com o parâmetro 'category_orders'
-    fig_top_cc = px.bar(
-        df_plot_cc, 
-        y=c_ccusto, 
-        x='Quantidade', 
-        color=c_crit, 
-        orientation='h', 
-        text_auto=True, 
-        custom_data=[c_crit], 
-        color_discrete_map=mapa_cores_crit,
-        category_orders={c_crit: ordem_desejada} # Define a ordem visual (esquerda -> direita)
-    )
-    
+    fig_top_cc = px.bar(df_plot_cc, y=c_ccusto, x='Quantidade', color=c_crit, orientation='h', text_auto=True, custom_data=[c_crit], color_discrete_map=mapa_cores_crit, category_orders={c_crit: ordem_desejada})
     fig_top_cc.update_layout(**dark_layout, barmode='stack')
     fig_top_cc.update_traces(textfont_size=18, textposition="inside")
     fig_top_cc.update_xaxes(visible=False)
     fig_top_cc.update_yaxes(type='category', categoryorder='array', categoryarray=top_10_cc_nomes[::-1], title="", tickfont=dict(size=14))
     
-    evento_cc = st.plotly_chart(fig_top_cc, use_container_width=True, on_select="rerun", config={'displayModeBar': False})
+    evento_cc = st.plotly_chart(fig_top_cc, use_container_width=True, on_select="rerun", config={'displayModeBar': False}, key=f"cc_{st.session_state.cc_key}")
     if evento_cc and len(evento_cc.selection.get("points", [])) > 0:
         ponto_selecionado = evento_cc.selection["points"][0]
         cc_clicado = str(ponto_selecionado["y"]).strip()
         crit_clicada = str(ponto_selecionado["customdata"][0]).strip()
         df_detalhe = df_f[(df_f[c_ccusto].astype(str).str.strip() == cc_clicado) & (df_f[c_crit].astype(str).str.strip() == crit_clicada) & (df_f['IS_ABERTA'])]
-        abrir_modal(df_detalhe.drop_duplicates(subset=[c_solic])[colunas_exibir])
+        st.session_state.df_modal = df_detalhe.drop_duplicates(subset=[c_solic])[colunas_exibir]
+        st.session_state.abrir_modal = True
+        st.session_state.cc_key += 1
+        st.rerun()
 else:
     st.write("Sem registros abertos.")
+
+# --- GERENCIADOR DE MODAL CENTRALIZADO (DESMARCAÇÃO AUTOMÁTICA) ---
+if st.session_state.get("abrir_modal", False):
+    abrir_modal(st.session_state.df_modal)
+    st.session_state.abrir_modal = False
