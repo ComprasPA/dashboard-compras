@@ -137,12 +137,13 @@ with c_l:
     with col_nums:
         st.write("<br>", unsafe_allow_html=True)
         if len(status_counts) > 0:
-            for status, qtd in status_counts.items(): st.metric(status, qtd)
+            for status, qtd in status_counts.items(): 
+                st.metric(status, qtd)
     with col_pizza:
         fig_p = go.Figure(data=[go.Pie(labels=status_counts.index, values=status_counts.values, marker=dict(colors=[CORES_STATUS.get(x, '#888') for x in status_counts.index]), textinfo='percent', textfont=dict(color='white', size=14), hole=0.4)])
         fig_p.update_layout(**dark_layout)
         
-        # --- NOVO: CAPTURA DO CLIQUE NO GRÁFICO DE PIZZA ---
+        # --- CAPTURA O CLIQUE NA FATIA DO GRÁFICO DE PIZZA ---
         evento_pizza = st.plotly_chart(fig_p, use_container_width=True, on_select="rerun", config={'displayModeBar': False}, key=f"pizza_{st.session_state.pizza_key}")
         if evento_pizza and len(evento_pizza.selection.get("points", [])) > 0:
             status_clicado = str(evento_pizza.selection["points"][0].get("label", "")).strip()
