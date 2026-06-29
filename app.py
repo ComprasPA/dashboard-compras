@@ -9,6 +9,7 @@ import io
 st.set_page_config(page_title="Dashboard Executivo", layout="wide", initial_sidebar_state="expanded")
 
 # --- INICIALIZAÇÃO DE CHAVES DE CONTROLE DE SELEÇÃO ---
+if "pizza_key" not in st.session_state: st.session_state.pizza_key = 0
 if "solic_key" not in st.session_state: st.session_state.solic_key = 0
 if "item_key" not in st.session_state: st.session_state.item_key = 0
 if "cc_key" not in st.session_state: st.session_state.cc_key = 0
@@ -140,7 +141,17 @@ with c_l:
     with col_pizza:
         fig_p = go.Figure(data=[go.Pie(labels=status_counts.index, values=status_counts.values, marker=dict(colors=[CORES_STATUS.get(x, '#888') for x in status_counts.index]), textinfo='percent', textfont=dict(color='white', size=14), hole=0.4)])
         fig_p.update_layout(**dark_layout)
-        st.plotly_chart(fig_p, use_container_width=True, config={'displayModeBar': False})
+        
+        # Ativando clique no gráfico de Pizza
+        evento_pizza = st.plotly_chart(fig_p, use_container_width=True, on_select="rerun", config={'displayModeBar': False}, key=f"pizza_{st.session_state.pizza_key}")
+        if evento_pizza and len(evento_pizza.selection.get("points", [])) > 0:
+            # Pega o rótulo da fatia clicada (ex: 'FINALIZADO', 'NO PRAZO')
+            status_clicado = str(evento_pizza.selection["points"][0].get("label", "")).strip()
+            df_detalhe = df_f[df_f['CATEGORIA_COR'].astype(str).str.strip() == status_clicado]
+            st.session_state.df_modal = df_detalhe.drop_duplicates(subset=[c_solic])[colunas_exibir]
+            st.session_state.abrir_modal = True
+            st.session_state.pizza_key += 1
+            st.rerun()
 
 with c_r:
     st.markdown("#### Volume por Criticidade")
