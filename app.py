@@ -204,6 +204,7 @@ if not df_cc_abertas.empty:
         else: mapa_cores_crit[crit] = '#ffb300'      
     
     fig_top_cc = px.bar(df_plot_cc, y=c_ccusto, x='Quantidade', color=c_crit, orientation='h', text_auto=True, custom_data=[c_crit], color_discrete_map=mapa_cores_crit)
+    
     for _, row in df_totals.iterrows():
         fig_top_cc.add_annotation(y=row[c_ccusto], x=row['Quantidade'], text=f" <b>Total: {row['Quantidade']}</b>", showarrow=False, xanchor='left', font=dict(color='#ffffff', size=16))
     
