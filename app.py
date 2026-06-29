@@ -22,14 +22,13 @@ def carregar_dados():
     response.raise_for_status()
     df = pd.read_csv(io.StringIO(response.text))
     
-    # TRATAMENTO ROBUSTO DOS DADOS
+    # Padronização
     df['STATUS_CLEAN'] = df['STATUS'].astype(str).str.strip().str.upper()
-    # Garantir que SLA seja tratado como número real
     df['SLA'] = pd.to_numeric(df['SLA'], errors='coerce').fillna(0)
     df['DT EMISSAO'] = pd.to_datetime(df['DT Emissao'], errors='coerce')
     
-    # ABERTA = SEM NÚMERO DE PEDIDO (PC)
-    df['IS_ABERTA'] = df['Nº Pedido (PC)'].isna() | (df['Nº Pedido (PC)'].astype(str).str.strip() == '')
+    # Lógica: Aberta = Sem número de pedido
+    df['IS_ABERTA'] = df['Nº Pedido (PC)'].isna() | (df['Nº Pedido (PC)'].astype(str) == 'nan')
     
     def categorizar(row):
         if not row['IS_ABERTA']: return 'FINALIZADO'
@@ -50,38 +49,59 @@ def carregar_dados():
 
 df_full = carregar_dados()
 
-# --- BARRA LATERAL ---
+# --- FILTROS ---
 st.sidebar.header("Filtros Dinâmicos")
 anos_disp = sorted(df_full['ANO'].dropna().unique())
 ano_sel = st.sidebar.multiselect("Ano:", anos_disp, default=anos_disp)
+mes_sel = st.sidebar.multiselect("Mês:", ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'], 
+                                 default=['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'])
 cc_sel = st.sidebar.multiselect("Centro de Custo:", sorted(df_full['C Custo'].dropna().unique().tolist()))
 
 df_f = df_full.copy()
 if ano_sel: df_f = df_f[df_f['ANO'].isin(ano_sel)]
+if mes_sel: df_f = df_f[df_f['MES_NOME'].isin(mes_sel)]
 if cc_sel: df_f = df_f[df_f['C Custo'].isin(cc_sel)]
+
+# --- CÁLCULO DE REGISTROS ÚNICOS ---
+# Removemos duplicatas de SC mantendo o maior SLA encontrado para cada SC
+df_sc_unicas = df_f.sort_values('SLA', ascending=False).drop_duplicates(subset=['Nº Solicitação (SC)'])
 
 # --- DASHBOARD ---
 st.title("📊 Dashboard Executivo de Compras")
 
-# Métricas (Considerando apenas o que é único por SC)
-df_sc_unicas = df_f.drop_duplicates(subset=['Nº Solicitação (SC)'])
 col1, col2, col3, col4 = st.columns(4)
-col1.metric("Pedidos Emitidos", df_sc_unicas['Nº Pedido (PC)'].dropna().nunique())
+col1.metric("Pedidos Emitidos", df_sc_unicas['Nº Pedido (PC)'].nunique())
 col2.metric("Sol. Fechadas", df_sc_unicas[~df_sc_unicas['IS_ABERTA']].shape[0])
 col3.metric("Sol. Abertas", df_sc_unicas[df_sc_unicas['IS_ABERTA']].shape[0])
 col4.metric("SLA Médio (Abertas)", round(df_sc_unicas[df_sc_unicas['IS_ABERTA']]['SLA'].mean(), 1))
 
 st.divider()
 
-# Top 10 ABERTAS (Lógica Corrigida: Agrupando por SC para pegar o valor real máximo)
+c_l, c_r = st.columns(2)
+with c_l:
+    st.subheader("Distribuição de Status")
+    status_counts = df_sc_unicas['CATEGORIA_COR'].value_counts()
+    fig_p = go.Figure(data=[go.Pie(labels=status_counts.index, values=status_counts.values, 
+                                   marker=dict(colors=[CORES_STATUS.get(x, '#ccc') for x in status_counts.index]),
+                                   textinfo='percent+label', hole=0.3)])
+    st.plotly_chart(fig_p, use_container_width=True)
+    
+    cols_s = st.columns(len(status_counts))
+    for i, (status, qtd) in enumerate(status_counts.items()):
+        cols_s[i].metric(status, qtd)
+
+with c_r:
+    st.subheader("Volume por Criticidade")
+    crit_counts = df_sc_unicas.groupby('Criticidade')['Nº Solicitação (SC)'].nunique()
+    fig_c = px.bar(crit_counts.reset_index(), x='Criticidade', y='Nº Solicitação (SC)', text_auto=True)
+    st.plotly_chart(fig_c, use_container_width=True)
+    
+    cols_c = st.columns(len(crit_counts))
+    for i, (crit, qtd) in enumerate(crit_counts.items()):
+        cols_c[i].metric(str(crit), qtd)
+
+st.divider()
 st.subheader("⚠️ Top 10 Solicitações em Aberto (Maiores SLAs)")
-
-# Filtra apenas abertas, agrupa por SC, pega o SLA máximo e ordena
-df_top10 = df_f[df_f['IS_ABERTA']].groupby(['Nº Solicitação (SC)', 'Descricao', 'C Custo', 'Comprador'])['SLA'].max().reset_index()
-df_top10 = df_top10.sort_values(by='SLA', ascending=False).head(10)
-
-# Exibe
-if not df_top10.empty:
-    st.dataframe(df_top10, use_container_width=True)
-else:
-    st.info("Nenhuma solicitação em aberto encontrada.")
+# Agora filtramos a base única apenas pelas abertas e ordenamos
+df_top10 = df_sc_unicas[df_sc_unicas['IS_ABERTA']].sort_values(by='SLA', ascending=False).head(10)
+st.dataframe(df_top10[['Nº Solicitação (SC)', 'Descricao', 'SLA', 'C Custo', 'Comprador']], use_container_width=True)
