@@ -58,6 +58,7 @@ meses_todos = ['January', 'February', 'March', 'April', 'May', 'June', 'July', '
 mes_sel = st.sidebar.multiselect("Mês:", meses_todos, default=meses_todos)
 cc_sel = st.sidebar.multiselect("Centro de Custo:", sorted(df_full[c_ccusto].dropna().unique().tolist()))
 
+# df_f É A BASE FILTRADA (USADA NOS GRÁFICOS E RANKING DE ITENS)
 df_f = df_full.copy()
 if ano_sel: df_f = df_f[df_f['ANO'].isin(ano_sel)]
 if mes_sel: df_f = df_f[df_f['MES_NOME'].isin(mes_sel)]
@@ -93,26 +94,32 @@ st.divider()
 col_tabela1, col_tabela2 = st.columns(2)
 
 with col_tabela1:
-    st.subheader("⚠️ Top 10 Solicitações em Aberto")
-    df_top10_abertas = df_f[df_f['IS_ABERTA']].sort_values('SLA', ascending=False).drop_duplicates(subset=[c_solic]).head(10)
+    st.subheader("⚠️ Top 10 Solicitações em Aberto (Global)")
+    
+    # 1. Pega os dados direto do df_full (base bruta) e cria uma cópia isolada
+    df_abertas_global = df_full[df_full['IS_ABERTA']].copy()
+    
+    # 2. Força o SLA a ser um número, para garantir a ordenação matemática (10 > 9)
+    df_abertas_global['SLA'] = pd.to_numeric(df_abertas_global['SLA'], errors='coerce').fillna(0)
+    
+    # 3. Ordena do maior para o menor (ascending=False) e pega o top 10
+    df_top10_abertas = df_abertas_global.sort_values(by='SLA', ascending=False).drop_duplicates(subset=[c_solic]).head(10)
+    
     st.dataframe(df_top10_abertas[[c_solic, c_desc, 'SLA', c_ccusto]], use_container_width=True)
 
 with col_tabela2:
     st.subheader("🛒 Top 10 Itens Mais Comprados (Frequência)")
     
+    # Esta tabela continua usando df_f para respeitar os filtros da barra lateral
     df_itens = df_f.copy()
     
-    # Cria uma coluna temporária em minúsculo para aplicar o filtro sem perder a formatação original
     desc_lower = df_itens[c_desc].astype(str).str.lower()
     
-    # Itens a remover
     termos_excluidos = ['oleo comb diesel comum a granel', 'gasolina']
     
-    # Aplica o filtro de exclusão
     filtro_exclusao = ~desc_lower.str.contains('|'.join(termos_excluidos), na=False)
     df_itens_filtrado = df_itens[filtro_exclusao]
     
-    # Conta a frequência em que o item aparece na planilha
     top_itens = df_itens_filtrado[c_desc].value_counts().reset_index().head(10)
     top_itens.columns = ['Item/Descrição', 'Vezes Solicitado']
     
