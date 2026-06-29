@@ -129,24 +129,28 @@ with c_l:
     st.markdown("#### Distribuição de Status")
     status_counts = df_sc_unicas['CATEGORIA_COR'].value_counts()
     
-    # Adicionado textinfo='label+value' e ajuste de fonte para trazer os números de volta ao gráfico
-    fig_p = go.Figure(data=[go.Pie(
-        labels=status_counts.index, 
-        values=status_counts.values, 
-        marker=dict(colors=[CORES_STATUS.get(x, '#888') for x in status_counts.index]), 
-        textinfo='label+value',
-        textfont=dict(color='white', size=14),
-        hole=0.4
-    )])
+    # Criando colunas internas: Texto na esquerda (peso 1), Pizza na direita (peso 1.5)
+    col_texto_pizza, col_grafico_pizza = st.columns([1, 1.5])
     
-    fig_p.update_layout(**dark_layout)
-    st.plotly_chart(fig_p, use_container_width=True)
-    
-    # Mantém os números detalhados abaixo do gráfico
-    if len(status_counts) > 0:
-        cols_s = st.columns(len(status_counts))
-        for i, (status, qtd) in enumerate(status_counts.items()): 
-            cols_s[i].metric(status, qtd)
+    with col_texto_pizza:
+        st.write("<br>", unsafe_allow_html=True) # Dá um pequeno empurrão para baixo para alinhar com o centro da pizza
+        if len(status_counts) > 0:
+            for status, qtd in status_counts.items(): 
+                st.metric(status, qtd)
+                
+    with col_grafico_pizza:
+        fig_p = go.Figure(data=[go.Pie(
+            labels=status_counts.index, 
+            values=status_counts.values, 
+            marker=dict(colors=[CORES_STATUS.get(x, '#888') for x in status_counts.index]), 
+            textinfo='label+value',
+            textfont=dict(color='white', size=14),
+            hole=0.4
+        )])
+        
+        fig_p.update_layout(**dark_layout)
+        fig_p.update_layout(showlegend=False) # Oculta a legenda padrão lateral para não duplicar com nossos textos
+        st.plotly_chart(fig_p, use_container_width=True)
 
 with c_r:
     st.markdown("#### Volume por Criticidade")
