@@ -25,12 +25,12 @@ def carregar_dados():
     response.raise_for_status()
     df = pd.read_csv(io.StringIO(response.text))
     
-    # Tratamentos
+    # Tratamentos básicos
     df['STATUS_CLEAN'] = df['STATUS'].astype(str).str.strip().str.upper()
     df['SLA'] = pd.to_numeric(df['SLA'], errors='coerce').fillna(0)
     df['DT EMISSAO'] = pd.to_datetime(df['DT Emissao'], errors='coerce')
     
-    # Lógica: ABERTA = SEM NÚMERO DE PEDIDO (PC)
+    # Identificar abertas (sem pedido)
     df['IS_ABERTA'] = df['Nº Pedido (PC)'].isna()
     
     def categorizar(row):
@@ -52,56 +52,55 @@ def carregar_dados():
 
 df_full = carregar_dados()
 
-# --- BARRA LATERAL ---
+# --- FILTROS ---
 st.sidebar.header("Filtros Dinâmicos")
-anos_disponiveis = sorted(df_full['ANO'].dropna().unique())
-ano_sel = st.sidebar.multiselect("Ano:", anos_disponiveis, default=anos_disponiveis)
-mes_sel = st.sidebar.multiselect("Mês:", ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'], 
-                                 default=['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'])
+anos_disp = sorted(df_full['ANO'].dropna().unique())
+ano_sel = st.sidebar.multiselect("Ano:", anos_disp, default=anos_disp)
+mes_sel = st.sidebar.multiselect("Mês:", ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'], default=['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'])
 cc_sel = st.sidebar.multiselect("Centro de Custo:", sorted(df_full['C Custo'].dropna().unique().tolist()))
 status_sel = st.sidebar.multiselect("Status:", list(CORES_STATUS.keys()))
 
 # Aplicação dos Filtros
-df_filtrado = df_full.copy()
-if ano_sel: df_filtrado = df_filtrado[df_filtrado['ANO'].isin(ano_sel)]
-if mes_sel: df_filtrado = df_filtrado[df_filtrado['MES_NOME'].isin(mes_sel)]
-if cc_sel: df_filtrado = df_filtrado[df_filtrado['C Custo'].isin(cc_sel)]
-if status_sel: df_filtrado = df_filtrado[df_filtrado['CATEGORIA_COR'].isin(status_sel)]
+df_f = df_full.copy()
+if ano_sel: df_f = df_f[df_f['ANO'].isin(ano_sel)]
+if mes_sel: df_f = df_f[df_f['MES_NOME'].isin(mes_sel)]
+if cc_sel: df_f = df_f[df_f['C Custo'].isin(cc_sel)]
+if status_sel: df_f = df_f[df_f['CATEGORIA_COR'].isin(status_sel)]
 
-df_unicos = df_filtrado.drop_duplicates(subset=['Nº Solicitação (SC)'])
+# --- CÁLCULO DE ÚNICOS ---
+# Removemos duplicatas de SC para garantir contagem correta
+df_sc_unicas = df_f.drop_duplicates(subset=['Nº Solicitação (SC)'])
 
 # --- DASHBOARD ---
 st.title("📊 Dashboard Executivo de Compras")
 
-# Métricas (Agora calculadas com a nova regra de "Aberta = Sem Pedido")
+# Métricas com contagem única
 col1, col2, col3, col4 = st.columns(4)
-col1.metric("Pedidos Emitidos", df_filtrado['Nº Pedido (PC)'].nunique())
-col2.metric("Sol. Fechadas", df_filtrado[~df_filtrado['IS_ABERTA']].shape[0])
-col3.metric("Sol. Abertas", df_filtrado[df_filtrado['IS_ABERTA']].shape[0])
-col4.metric("SLA Médio (Dias)", round(df_filtrado['SLA'].mean(), 1))
+col1.metric("Pedidos Emitidos", df_sc_unicas['Nº Pedido (PC)'].nunique())
+col2.metric("Sol. Fechadas", df_sc_unicas[~df_sc_unicas['IS_ABERTA']].shape[0])
+col3.metric("Sol. Abertas", df_sc_unicas[df_sc_unicas['IS_ABERTA']].shape[0])
+col4.metric("SLA Médio (Dias)", round(df_sc_unicas['SLA'].mean(), 1))
 
 st.divider()
 
 # Gráficos
-c_left, c_right = st.columns(2)
-with c_left:
+c_l, c_r = st.columns(2)
+with c_l:
     st.subheader("Distribuição de Status")
-    status_counts = df_filtrado['CATEGORIA_COR'].value_counts()
-    fig_pizza = go.Figure(data=[go.Pie(labels=status_counts.index, values=status_counts.values, 
-                                       marker=dict(colors=[CORES_STATUS.get(x, '#ccc') for x in status_counts.index]),
-                                       textinfo='percent+label', hole=0.3)])
-    st.plotly_chart(fig_pizza, use_container_width=True)
+    status_counts = df_sc_unicas['CATEGORIA_COR'].value_counts()
+    fig_p = go.Figure(data=[go.Pie(labels=status_counts.index, values=status_counts.values, 
+                                   marker=dict(colors=[CORES_STATUS.get(x, '#ccc') for x in status_counts.index]),
+                                   textinfo='percent+label', hole=0.3)])
+    st.plotly_chart(fig_p, use_container_width=True)
 
-with c_right:
+with c_r:
     st.subheader("Volume por Criticidade")
-    fig_crit = px.bar(df_filtrado.groupby('Criticidade')['Nº Solicitação (SC)'].nunique().reset_index(), 
-                      x='Criticidade', y='Nº Solicitação (SC)', text_auto=True)
-    st.plotly_chart(fig_crit, use_container_width=True)
+    fig_c = px.bar(df_sc_unicas.groupby('Criticidade')['Nº Solicitação (SC)'].nunique().reset_index(), 
+                   x='Criticidade', y='Nº Solicitação (SC)', text_auto=True)
+    st.plotly_chart(fig_c, use_container_width=True)
 
-# Top 10 ABERTAS (Apenas as que não tem pedido de compra)
+# Top 10 ABERTAS (Únicas)
 st.divider()
 st.subheader("⚠️ Top 10 Solicitações em Aberto (Maiores SLAs)")
-df_top10 = df_filtrado[df_filtrado['IS_ABERTA']].groupby(['Nº Solicitação (SC)', 'Descricao', 'C Custo', 'Comprador'])['SLA'].max().reset_index()
-df_top10 = df_top10.sort_values(by='SLA', ascending=False).head(10)
-
-st.dataframe(df_top10, use_container_width=True)
+df_top10 = df_sc_unicas[df_sc_unicas['IS_ABERTA']].sort_values(by='SLA', ascending=False).head(10)
+st.dataframe(df_top10[['Nº Solicitação (SC)', 'Descricao', 'SLA', 'C Custo', 'Comprador']], use_container_width=True)
