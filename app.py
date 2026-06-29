@@ -165,7 +165,7 @@ with c_r:
 
 st.markdown("<hr style='border-color: #2b2b40;'>", unsafe_allow_html=True)
 
-# --- TABELAS QUADRANTE SUPERIOR ---
+# --- TABELAS & GRÁFICOS QUADRANTE SUPERIOR ---
 col_tabela1, col_tabela2 = st.columns(2)
 
 with col_tabela1:
@@ -173,6 +173,13 @@ with col_tabela1:
     df_abertas_global = df_full[df_full['IS_ABERTA']].copy()
     df_abertas_global['SLA'] = pd.to_numeric(df_abertas_global['SLA'], errors='coerce').fillna(0)
     df_top10_abertas = df_abertas_global.sort_values(by='SLA', ascending=False).drop_duplicates(subset=[c_solic]).head(10)
+    
+    # Gráfico para Top 10 Solicitações
+    fig_top_solic = px.bar(df_top10_abertas, x='SLA', y=c_solic, text_auto=True, orientation='h', color_discrete_sequence=['#e91e63'])
+    fig_top_solic.update_layout(**dark_layout)
+    fig_top_solic.update_xaxes(visible=False)
+    fig_top_solic.update_yaxes(autorange="reversed", title="")
+    st.plotly_chart(fig_top_solic, use_container_width=True)
     
     st.dataframe(df_top10_abertas[[c_solic, c_desc, 'SLA', c_ccusto]], use_container_width=True)
 
@@ -187,26 +194,36 @@ with col_tabela2:
     top_itens = df_itens[filtro_exclusao][c_desc].value_counts().reset_index().head(10)
     top_itens.columns = ['Item/Descrição', 'Vezes Solicitado']
     
+    # Gráfico para Top 10 Itens
+    fig_top_itens = px.bar(top_itens, x='Vezes Solicitado', y='Item/Descrição', text_auto=True, orientation='h', color_discrete_sequence=['#00c853'])
+    fig_top_itens.update_layout(**dark_layout)
+    fig_top_itens.update_xaxes(visible=False)
+    fig_top_itens.update_yaxes(autorange="reversed", title="")
+    st.plotly_chart(fig_top_itens, use_container_width=True)
+    
     st.dataframe(top_itens, use_container_width=True)
 
 st.markdown("<hr style='border-color: #2b2b40;'>", unsafe_allow_html=True)
 
-# --- TABELAS QUADRANTE INFERIOR ---
+# --- TABELAS & GRÁFICOS QUADRANTE INFERIOR ---
 col_tabela3, col_tabela4 = st.columns(2)
 
 with col_tabela3:
     st.markdown("#### 🏢 Top 10 Centros de Custo (Sol. Abertas por Criticidade)")
-    
-    # Isola dados abertos consolidados de forma única por solicitação
     df_cc_abertas = df_f[df_f['IS_ABERTA']].drop_duplicates(subset=[c_solic]).copy()
     
     if not df_cc_abertas.empty:
-        # Cruza centros de custo com criticidade abrindo colunas dinâmicas (unstack)
         top_cc = df_cc_abertas.groupby([c_ccusto, c_crit])[c_solic].nunique().unstack(fill_value=0)
-        
-        # Consolida coluna totalizadora estrutural para determinar ranking
         top_cc['Total Geral'] = top_cc.sum(axis=1)
         top_cc = top_cc.sort_values(by='Total Geral', ascending=False).head(10).reset_index()
+        
+        # Gráfico de Barras Empilhadas (Mapeia as criticidades dinamicamente)
+        cols_crit = [col for col in top_cc.columns if col not in [c_ccusto, 'Total Geral']]
+        fig_top_cc = px.bar(top_cc, y=c_ccusto, x=cols_crit, orientation='h', color_discrete_sequence=['#0f62fe', '#ffb300', '#e91e63'])
+        fig_top_cc.update_layout(**dark_layout, barmode='stack')
+        fig_top_cc.update_xaxes(visible=False)
+        fig_top_cc.update_yaxes(autorange="reversed", title="")
+        st.plotly_chart(fig_top_cc, use_container_width=True)
         
         st.dataframe(top_cc, use_container_width=True)
     else:
