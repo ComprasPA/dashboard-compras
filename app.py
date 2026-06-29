@@ -157,11 +157,8 @@ with c_r:
     fig_c = px.bar(crit_counts, y=c_crit, x=c_solic, text_auto=True, orientation='h', color_discrete_sequence=['#0f62fe'])
     
     fig_c.update_layout(**dark_layout)
-    # Dobrando o tamanho da fonte (de 16 para 32)
     fig_c.update_traces(textfont_size=32) 
-    # Removendo o eixo inferior (eixo X) completamente
     fig_c.update_xaxes(visible=False) 
-    # Aumentando o texto do eixo Y para equilibrar o visual
     fig_c.update_yaxes(title="", tickfont=dict(size=24)) 
     
     st.plotly_chart(fig_c, use_container_width=True)
@@ -191,3 +188,21 @@ with col_tabela2:
     top_itens.columns = ['Item/Descrição', 'Vezes Solicitado']
     
     st.dataframe(top_itens, use_container_width=True)
+
+st.markdown("<hr style='border-color: #2b2b40;'>", unsafe_allow_html=True)
+
+# --- NOVA TABELA: CENTROS DE CUSTO ---
+col_tabela3, col_tabela4 = st.columns(2)
+
+with col_tabela3:
+    st.markdown("#### 🏢 Top 10 Centros de Custo (Sol. Abertas)")
+    
+    # Filtra apenas solicitações em aberto baseadas no dataframe com os filtros aplicados
+    df_cc_abertas = df_f[df_f['IS_ABERTA']].copy()
+    
+    # Agrupa por Centro de Custo e conta as solicitações únicas
+    top_cc = df_cc_abertas.groupby(c_ccusto)[c_solic].nunique().reset_index()
+    top_cc = top_cc.sort_values(by=c_solic, ascending=False).head(10)
+    top_cc.columns = ['Centro de Custo', 'Qtd Sol. Abertas']
+    
+    st.dataframe(top_cc, use_container_width=True)
