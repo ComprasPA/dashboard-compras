@@ -165,7 +165,7 @@ with c_r:
 
 st.markdown("<hr style='border-color: #2b2b40;'>", unsafe_allow_html=True)
 
-# --- GRÁFICOS QUADRANTE SUPERIOR (Tabelas Ocultadas) ---
+# --- GRÁFICOS QUADRANTE SUPERIOR ---
 col_graf1, col_graf2 = st.columns(2)
 
 with col_graf1:
@@ -186,14 +186,16 @@ with col_graf1:
         color_discrete_sequence=['#e91e63']
     )
     
+    # AJUSTE: Fonte interna dobrada para 28
     fig_top_solic.update_traces(
         textposition='inside', 
-        textfont_size=14,
+        textfont_size=28,
         hovertemplate="<b>Solicitação:</b> %{y}<br><b>SLA:</b> %{x} dias<br><b>Item:</b> %{customdata[0]}<extra></extra>"
     )
     fig_top_solic.update_layout(**dark_layout)
     fig_top_solic.update_xaxes(visible=False)
-    fig_top_solic.update_yaxes(autorange="reversed", type='category', title="")
+    # AJUSTE: Texto das categorias aumentado para 20
+    fig_top_solic.update_yaxes(autorange="reversed", type='category', title="", tickfont=dict(size=20))
     
     st.plotly_chart(fig_top_solic, use_container_width=True)
 
@@ -208,17 +210,19 @@ with col_graf2:
     top_itens = df_itens[filtro_exclusao][c_desc].value_counts().reset_index().head(10)
     top_itens.columns = ['Item/Descrição', 'Vezes Solicitado']
     
-    # Restaurado para o formato de Barras Horizontais
     fig_top_itens = px.bar(top_itens, x='Vezes Solicitado', y='Item/Descrição', text_auto=True, orientation='h', color_discrete_sequence=['#00c853'])
     fig_top_itens.update_layout(**dark_layout)
+    # AJUSTE: Fonte interna dobrada para 28
+    fig_top_itens.update_traces(textfont_size=28)
     fig_top_itens.update_xaxes(visible=False)
-    fig_top_itens.update_yaxes(autorange="reversed", title="")
+    # AJUSTE: Texto das categorias aumentado para 20
+    fig_top_itens.update_yaxes(autorange="reversed", title="", tickfont=dict(size=20))
     
     st.plotly_chart(fig_top_itens, use_container_width=True)
 
 st.markdown("<hr style='border-color: #2b2b40;'>", unsafe_allow_html=True)
 
-# --- GRÁFICO INFERIOR (Largura Total & Com Valores) ---
+# --- GRÁFICO INFERIOR ---
 st.markdown("#### 🏢 Top 10 Centros de Custo (Sol. Abertas por Criticidade)")
 
 df_cc_abertas = df_f[df_f['IS_ABERTA']].drop_duplicates(subset=[c_solic]).copy()
@@ -240,9 +244,11 @@ if not df_cc_abertas.empty:
     )
     
     fig_top_cc.update_layout(**dark_layout, barmode='stack')
-    fig_top_cc.update_traces(textfont_size=14, textposition="inside")
+    # AJUSTE: Fonte interna dobrada para 28
+    fig_top_cc.update_traces(textfont_size=28, textposition="inside")
     fig_top_cc.update_xaxes(visible=False)
-    fig_top_cc.update_yaxes(autorange="reversed", type='category', title="")
+    # AJUSTE: Texto das categorias aumentado para 20
+    fig_top_cc.update_yaxes(autorange="reversed", type='category', title="", tickfont=dict(size=20))
     
     st.plotly_chart(fig_top_cc, use_container_width=True)
 else:
