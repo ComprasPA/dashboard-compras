@@ -163,7 +163,6 @@ with c_r:
     fig_c = px.bar(crit_counts, y=c_crit, x=c_solic, text_auto=True, orientation='h', color_discrete_sequence=['#0f62fe'])
     
     fig_c.update_layout(**dark_layout)
-    # AJUSTE: Reduzido para 2/3 do tamanho (números internos para 21 e textos dos eixos para 16)
     fig_c.update_traces(textfont_size=21) 
     fig_c.update_xaxes(visible=False) 
     fig_c.update_yaxes(title="", tickfont=dict(size=16)) 
@@ -239,42 +238,59 @@ st.markdown("#### 🏢 Top 10 Centros de Custo (Sol. Abertas por Criticidade)")
 df_cc_abertas = df_f[df_f['IS_ABERTA']].drop_duplicates(subset=[c_solic]).copy()
 
 if not df_cc_abertas.empty:
-    top_cc = df_cc_abertas.groupby([c_ccusto, c_crit])[c_solic].nunique().unstack(fill_value=0)
-    top_cc['Total Geral'] = top_cc.sum(axis=1)
-    top_cc = top_cc.sort_values(by='Total Geral', ascending=False).head(10).reset_index()
+    # 1. Encontrar os 10 maiores Centros de Custo no total global de abertas
+    totais_cc = df_cc_abertas.groupby(c_ccusto)[c_solic].nunique().reset_index(name='Total')
+    top_10_cc_nomes = totais_cc.sort_values(by='Total', ascending=False).head(10)[c_ccusto].tolist()
     
-    cols_crit = [col for col in top_cc.columns if col not in [c_ccusto, 'Total Geral']]
+    # 2. Filtrar a base apenas para os Top 10 encontrados
+    df_top10_cc = df_cc_abertas[df_cc_abertas[c_ccusto].isin(top_10_cc_nomes)]
+    
+    # 3. Criar os dados de plotagem no formato "longo" para que a cor vire um dado clicável (custom_data)
+    df_plot_cc = df_top10_cc.groupby([c_ccusto, c_crit])[c_solic].nunique().reset_index(name='Quantidade')
     
     mapa_cores_crit = {}
-    for col in cols_crit:
-        col_str = str(col).lower().strip()
-        if 'direta' in col_str:
-            mapa_cores_crit[col] = '#00c853'      
-        elif 'emergencial' in col_str:
-            mapa_cores_crit[col] = '#e91e63'   
-        elif 'rotineira' in col_str:
-            mapa_cores_crit[col] = '#0f62fe'      
+    for crit in df_plot_cc[c_crit].unique():
+        crit_str = str(crit).lower().strip()
+        if 'direta' in crit_str:
+            mapa_cores_crit[crit] = '#00c853'      
+        elif 'emergencial' in crit_str:
+            mapa_cores_crit[crit] = '#e91e63'   
+        elif 'rotineira' in crit_str:
+            mapa_cores_crit[crit] = '#0f62fe'      
         else:
-            mapa_cores_crit[col] = '#ffb300'      
+            mapa_cores_crit[crit] = '#ffb300'      
     
     fig_top_cc = px.bar(
-        top_cc, 
+        df_plot_cc, 
         y=c_ccusto, 
-        x=cols_crit, 
+        x='Quantidade', 
+        color=c_crit,          # Define a cor baseada na criticidade
         orientation='h', 
         text_auto=True,
+        custom_data=[c_crit],  # Habilita a criticidade a ser capturada no clique
         color_discrete_map=mapa_cores_crit
     )
     
     fig_top_cc.update_layout(**dark_layout, barmode='stack')
     fig_top_cc.update_traces(textfont_size=18, textposition="inside")
     fig_top_cc.update_xaxes(visible=False)
-    fig_top_cc.update_yaxes(autorange="reversed", type='category', title="", tickfont=dict(size=14))
+    
+    # Força a ordem exata do Top 10 (do maior para o menor)
+    fig_top_cc.update_yaxes(categoryorder='array', categoryarray=top_10_cc_nomes[::-1], title="", tickfont=dict(size=14))
     
     evento_cc = st.plotly_chart(fig_top_cc, use_container_width=True, on_select="rerun")
     if evento_cc and len(evento_cc.selection.get("points", [])) > 0:
-        cc_clicado = evento_cc.selection["points"][0]["y"]
-        df_detalhe = df_f[(df_f[c_ccusto].astype(str) == str(cc_clicado)) & (df_f['IS_ABERTA'])]
+        ponto_selecionado = evento_cc.selection["points"][0]
+        cc_clicado = ponto_selecionado["y"]
+        # Captura o valor exato do custom_data (que configuramos como a criticidade)
+        crit_clicada = ponto_selecionado["customdata"][0] 
+        
+        # Filtra o DataFrame cruzando Centro de Custo E a Criticidade da barra selecionada
+        df_detalhe = df_f[
+            (df_f[c_ccusto].astype(str) == str(cc_clicado)) & 
+            (df_f[c_crit].astype(str) == str(crit_clicada)) & 
+            (df_f['IS_ABERTA'])
+        ]
         abrir_modal(df_detalhe)
 else:
     st.write("Sem registros abertos para os filtros aplicados.")
