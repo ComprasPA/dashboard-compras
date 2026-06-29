@@ -9,7 +9,6 @@ import io
 st.set_page_config(page_title="Dashboard Executivo", layout="wide", initial_sidebar_state="expanded")
 
 # --- INICIALIZAÇÃO DE CHAVES DE CONTROLE DE SELEÇÃO ---
-if "pizza_key" not in st.session_state: st.session_state.pizza_key = 0
 if "solic_key" not in st.session_state: st.session_state.solic_key = 0
 if "item_key" not in st.session_state: st.session_state.item_key = 0
 if "cc_key" not in st.session_state: st.session_state.cc_key = 0
@@ -83,7 +82,6 @@ def carregar_dados():
 
     df['ANO'] = df['DT_DT'].dt.year
     
-    # Tradução dos meses
     mapa_meses = {
         'January': 'Janeiro', 'February': 'Fevereiro', 'March': 'Março',
         'April': 'Abril', 'May': 'Maio', 'June': 'Junho',
@@ -137,20 +135,19 @@ with c_l:
     with col_nums:
         st.write("<br>", unsafe_allow_html=True)
         if len(status_counts) > 0:
-            for status, qtd in status_counts.items(): st.metric(status, qtd)
+            for status, qtd in status_counts.items(): 
+                st.metric(status, qtd)
+                # --- BOTÃO DE ACIONAMENTO DO POP-UP ---
+                if st.button(f"🔍 Detalhes", key=f"btn_status_{status}", use_container_width=True):
+                    df_detalhe = df_f[df_f['CATEGORIA_COR'].astype(str).str.strip() == str(status).strip()]
+                    st.session_state.df_modal = df_detalhe.drop_duplicates(subset=[c_solic])[colunas_exibir]
+                    st.session_state.abrir_modal = True
+                    
     with col_pizza:
         fig_p = go.Figure(data=[go.Pie(labels=status_counts.index, values=status_counts.values, marker=dict(colors=[CORES_STATUS.get(x, '#888') for x in status_counts.index]), textinfo='percent', textfont=dict(color='white', size=14), hole=0.4)])
         fig_p.update_layout(**dark_layout)
-        
-        # --- NOVO: CAPTURA DO CLIQUE NO GRÁFICO DE PIZZA ---
-        evento_pizza = st.plotly_chart(fig_p, use_container_width=True, on_select="rerun", config={'displayModeBar': False}, key=f"pizza_{st.session_state.pizza_key}")
-        if evento_pizza and len(evento_pizza.selection.get("points", [])) > 0:
-            status_clicado = str(evento_pizza.selection["points"][0].get("label", "")).strip()
-            df_detalhe = df_f[df_f['CATEGORIA_COR'].astype(str).str.strip() == status_clicado]
-            st.session_state.df_modal = df_detalhe.drop_duplicates(subset=[c_solic])[colunas_exibir]
-            st.session_state.abrir_modal = True
-            st.session_state.pizza_key += 1
-            st.rerun()
+        # O gráfico de pizza não precisa mais da propriedade on_select, pois o botão faz a ação
+        st.plotly_chart(fig_p, use_container_width=True, config={'displayModeBar': False})
 
 with c_r:
     st.markdown("#### Volume por Criticidade")
@@ -225,6 +222,7 @@ if not df_cc_abertas.empty:
     top_10_cc_nomes = totais_cc.sort_values(by='Total', ascending=False).head(10)[c_ccusto].tolist()
     df_top10_cc = df_cc_abertas[df_cc_abertas[c_ccusto].isin(top_10_cc_nomes)]
     df_plot_cc = df_top10_cc.groupby([c_ccusto, c_crit])[c_solic].nunique().reset_index(name='Quantidade')
+    df_totals = df_plot_cc.groupby(c_ccusto)['Quantidade'].sum().reset_index()
     
     mapa_cores_crit = {}
     for crit in df_plot_cc[c_crit].unique():
@@ -245,9 +243,13 @@ if not df_cc_abertas.empty:
         if c not in ordem_desejada: ordem_desejada.append(c)
     
     fig_top_cc = px.bar(df_plot_cc, y=c_ccusto, x='Quantidade', color=c_crit, orientation='h', text_auto=True, custom_data=[c_crit], color_discrete_map=mapa_cores_crit, category_orders={c_crit: ordem_desejada})
-    fig_top_cc.update_layout(**dark_layout, barmode='stack')
-    fig_top_cc.update_traces(textfont_size=18, textposition="inside")
-    fig_top_cc.update_xaxes(visible=False)
+    
+    for _, row in df_totals.iterrows():
+        fig_top_cc.add_annotation(y=row[c_ccusto], x=row['Quantidade'], text=f" <b>Total: {row['Quantidade']}</b>", showarrow=False, xanchor='left', xshift=10, font=dict(color='#ffffff', size=14))
+    
+    layout_ajustado = dark_layout.copy()
+    fig_top_cc.update_layout(**layout_ajustado, barmode='stack', margin=dict(t=30, b=30, l=30, r=120), xaxis=dict(showgrid=False, showline=False, zeroline=False, range=[0, df_totals['Quantidade'].max() * 1.4]))
+    fig_top_cc.update_traces(textfont_size=14, textposition="inside")
     fig_top_cc.update_yaxes(type='category', categoryorder='array', categoryarray=top_10_cc_nomes[::-1], title="", tickfont=dict(size=14))
     
     evento_cc = st.plotly_chart(fig_top_cc, use_container_width=True, on_select="rerun", config={'displayModeBar': False}, key=f"cc_{st.session_state.cc_key}")
