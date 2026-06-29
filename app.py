@@ -184,7 +184,7 @@ with col_graf2:
 
 st.markdown("<hr style='border-color: #2b2b40;'>", unsafe_allow_html=True)
 
-# --- GRÁFICO INFERIOR ---
+# --- GRÁFICO INFERIOR (COM ORDENAÇÃO DE BARRAS) ---
 st.markdown("#### 🏢 Top 10 Centros de Custo (Sol. Abertas por Criticidade)")
 df_cc_abertas = df_f[df_f['IS_ABERTA']].copy()
 if not df_cc_abertas.empty:
@@ -200,9 +200,39 @@ if not df_cc_abertas.empty:
         if 'direta' in crit_str: mapa_cores_crit[crit] = '#00c853'      
         elif 'emerg' in crit_str: mapa_cores_crit[crit] = '#e91e63'   
         elif 'rotin' in crit_str: mapa_cores_crit[crit] = '#0f62fe'      
-        else: mapa_cores_crit[crit] = '#ffb300'      
+        else: mapa_cores_crit[crit] = '#ffb300' # Correção de Processo fica com tom amarelado/laranja
+        
+    # LOGICA DE ORDENAÇÃO FORÇADA
+    todas_crits = df_plot_cc[c_crit].unique().tolist()
+    ordem_desejada = []
     
-    fig_top_cc = px.bar(df_plot_cc, y=c_ccusto, x='Quantidade', color=c_crit, orientation='h', text_auto=True, custom_data=[c_crit], color_discrete_map=mapa_cores_crit)
+    # 1. Compras direta
+    ordem_desejada.extend([c for c in todas_crits if 'direta' in str(c).lower()])
+    # 2. Correção de processo
+    ordem_desejada.extend([c for c in todas_crits if 'corre' in str(c).lower() or 'process' in str(c).lower()])
+    # 3. Emergencial
+    ordem_desejada.extend([c for c in todas_crits if 'emerg' in str(c).lower()])
+    # 4. Rotineira
+    ordem_desejada.extend([c for c in todas_crits if 'rotin' in str(c).lower()])
+    
+    # Adiciona eventuais criticidades que escaparam da regra acima
+    for c in todas_crits:
+        if c not in ordem_desejada:
+            ordem_desejada.append(c)
+    
+    # Geração do gráfico com o parâmetro 'category_orders'
+    fig_top_cc = px.bar(
+        df_plot_cc, 
+        y=c_ccusto, 
+        x='Quantidade', 
+        color=c_crit, 
+        orientation='h', 
+        text_auto=True, 
+        custom_data=[c_crit], 
+        color_discrete_map=mapa_cores_crit,
+        category_orders={c_crit: ordem_desejada} # Define a ordem visual (esquerda -> direita)
+    )
+    
     fig_top_cc.update_layout(**dark_layout, barmode='stack')
     fig_top_cc.update_traces(textfont_size=18, textposition="inside")
     fig_top_cc.update_xaxes(visible=False)
