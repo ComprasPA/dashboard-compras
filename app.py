@@ -96,13 +96,8 @@ col_tabela1, col_tabela2 = st.columns(2)
 with col_tabela1:
     st.subheader("⚠️ Top 10 Solicitações em Aberto (Global)")
     
-    # 1. Pega os dados direto do df_full (base bruta) e cria uma cópia isolada
     df_abertas_global = df_full[df_full['IS_ABERTA']].copy()
-    
-    # 2. Força o SLA a ser um número, para garantir a ordenação matemática (10 > 9)
     df_abertas_global['SLA'] = pd.to_numeric(df_abertas_global['SLA'], errors='coerce').fillna(0)
-    
-    # 3. Ordena do maior para o menor (ascending=False) e pega o top 10
     df_top10_abertas = df_abertas_global.sort_values(by='SLA', ascending=False).drop_duplicates(subset=[c_solic]).head(10)
     
     st.dataframe(df_top10_abertas[[c_solic, c_desc, 'SLA', c_ccusto]], use_container_width=True)
@@ -110,12 +105,11 @@ with col_tabela1:
 with col_tabela2:
     st.subheader("🛒 Top 10 Itens Mais Comprados (Frequência)")
     
-    # Esta tabela continua usando df_f para respeitar os filtros da barra lateral
     df_itens = df_f.copy()
-    
     desc_lower = df_itens[c_desc].astype(str).str.lower()
     
-    termos_excluidos = ['oleo comb diesel comum a granel', 'gasolina']
+    # Atualização: Filtro de exclusão abrange combustível e todos os serviços
+    termos_excluidos = ['oleo comb diesel comum a granel', 'gasolina', 'serviço', 'servico', 'serv']
     
     filtro_exclusao = ~desc_lower.str.contains('|'.join(termos_excluidos), na=False)
     df_itens_filtrado = df_itens[filtro_exclusao]
