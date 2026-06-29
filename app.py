@@ -165,10 +165,10 @@ with c_r:
 
 st.markdown("<hr style='border-color: #2b2b40;'>", unsafe_allow_html=True)
 
-# --- TABELAS & GRÁFICOS QUADRANTE SUPERIOR ---
-col_tabela1, col_tabela2 = st.columns(2)
+# --- GRÁFICOS QUADRANTE SUPERIOR (Tabelas Ocultadas) ---
+col_graf1, col_graf2 = st.columns(2)
 
-with col_tabela1:
+with col_graf1:
     st.markdown("#### ⚠️ Top 10 Solicitações em Aberto (Global)")
     df_abertas_global = df_full[df_full['IS_ABERTA']].copy()
     df_abertas_global['SLA'] = pd.to_numeric(df_abertas_global['SLA'], errors='coerce').fillna(0)
@@ -176,16 +176,29 @@ with col_tabela1:
     
     df_top10_abertas['Solicitação_Str'] = df_top10_abertas[c_solic].astype(str)
     
-    fig_top_solic = px.bar(df_top10_abertas, x='SLA', y='Solicitação_Str', text='SLA', orientation='h', color_discrete_sequence=['#e91e63'])
+    # Inserido "hover_data" para o gráfico capturar a descrição e "hovertemplate" para exibi-la formatada
+    fig_top_solic = px.bar(
+        df_top10_abertas, 
+        x='SLA', 
+        y='Solicitação_Str', 
+        text='SLA', 
+        orientation='h', 
+        hover_data=[c_desc],
+        color_discrete_sequence=['#e91e63']
+    )
+    
+    fig_top_solic.update_traces(
+        textposition='inside', 
+        textfont_size=14,
+        hovertemplate="<b>Solicitação:</b> %{y}<br><b>SLA:</b> %{x} dias<br><b>Item:</b> %{customdata[0]}<extra></extra>"
+    )
     fig_top_solic.update_layout(**dark_layout)
-    fig_top_solic.update_traces(textposition='inside', textfont_size=14)
     fig_top_solic.update_xaxes(visible=False)
     fig_top_solic.update_yaxes(autorange="reversed", type='category', title="")
-    st.plotly_chart(fig_top_solic, use_container_width=True)
     
-    st.dataframe(df_top10_abertas[[c_solic, c_desc, 'SLA', c_ccusto]], use_container_width=True)
+    st.plotly_chart(fig_top_solic, use_container_width=True)
 
-with col_tabela2:
+with col_graf2:
     st.markdown("#### 🛒 Top 10 Itens Mais Comprados (Frequência)")
     df_itens = df_f.copy()
     desc_lower = df_itens[c_desc].astype(str).str.lower()
@@ -196,38 +209,44 @@ with col_tabela2:
     top_itens = df_itens[filtro_exclusao][c_desc].value_counts().reset_index().head(10)
     top_itens.columns = ['Item/Descrição', 'Vezes Solicitado']
     
-    # Restaurado para o formato de Barras Horizontais anterior
-    fig_top_itens = px.bar(top_itens, x='Vezes Solicitado', y='Item/Descrição', text_auto=True, orientation='h', color_discrete_sequence=['#00c853'])
+    fig_top_itens = px.bar(top_itens, x='Item/Descrição', y='Vezes Solicitado', text_auto=True, orientation='v', color_discrete_sequence=['#00c853'])
     fig_top_itens.update_layout(**dark_layout)
-    fig_top_itens.update_xaxes(visible=False)
-    fig_top_itens.update_yaxes(autorange="reversed", title="")
-    st.plotly_chart(fig_top_itens, use_container_width=True)
+    fig_top_itens.update_traces(textposition='outside', textfont_size=14)
+    fig_top_itens.update_xaxes(visible=True, title="", tickangle=-45, tickfont=dict(size=10))
+    fig_top_itens.update_yaxes(visible=False, title="")
     
-    st.dataframe(top_itens, use_container_width=True)
+    st.plotly_chart(fig_top_itens, use_container_width=True)
 
 st.markdown("<hr style='border-color: #2b2b40;'>", unsafe_allow_html=True)
 
-# --- TABELAS & GRÁFICOS QUADRANTE INFERIOR ---
-col_tabela3, col_tabela4 = st.columns(2)
+# --- GRÁFICO INFERIOR (Largura Total & Com Valores) ---
+st.markdown("#### 🏢 Top 10 Centros de Custo (Sol. Abertas por Criticidade)")
 
-with col_tabela3:
-    st.markdown("#### 🏢 Top 10 Centros de Custo (Sol. Abertas por Criticidade)")
-    df_cc_abertas = df_f[df_f['IS_ABERTA']].drop_duplicates(subset=[c_solic]).copy()
+df_cc_abertas = df_f[df_f['IS_ABERTA']].drop_duplicates(subset=[c_solic]).copy()
+
+if not df_cc_abertas.empty:
+    top_cc = df_cc_abertas.groupby([c_ccusto, c_crit])[c_solic].nunique().unstack(fill_value=0)
+    top_cc['Total Geral'] = top_cc.sum(axis=1)
+    top_cc = top_cc.sort_values(by='Total Geral', ascending=False).head(10).reset_index()
     
-    if not df_cc_abertas.empty:
-        top_cc = df_cc_abertas.groupby([c_ccusto, c_crit])[c_solic].nunique().unstack(fill_value=0)
-        top_cc['Total Geral'] = top_cc.sum(axis=1)
-        top_cc = top_cc.sort_values(by='Total Geral', ascending=False).head(10).reset_index()
-        
-        cols_crit = [col for col in top_cc.columns if col not in [c_ccusto, 'Total Geral']]
-        
-        # Restaurado para o formato de Barras Empilhadas anterior
-        fig_top_cc = px.bar(top_cc, y=c_ccusto, x=cols_crit, orientation='h', color_discrete_sequence=['#0f62fe', '#ffb300', '#e91e63'])
-        fig_top_cc.update_layout(**dark_layout, barmode='stack')
-        fig_top_cc.update_xaxes(visible=False)
-        fig_top_cc.update_yaxes(autorange="reversed", type='category', title="")
-        st.plotly_chart(fig_top_cc, use_container_width=True)
-        
-        st.dataframe(top_cc, use_container_width=True)
-    else:
-        st.write("Sem registros abertos para os filtros aplicados.")
+    cols_crit = [col for col in top_cc.columns if col not in [c_ccusto, 'Total Geral']]
+    
+    # Retornado para gráfico de barras empilhadas e ativado 'text_auto=True' para mostrar valores em cada barra
+    fig_top_cc = px.bar(
+        top_cc, 
+        y=c_ccusto, 
+        x=cols_crit, 
+        orientation='h', 
+        text_auto=True,
+        color_discrete_sequence=['#0f62fe', '#ffb300', '#e91e63']
+    )
+    
+    fig_top_cc.update_layout(**dark_layout, barmode='stack')
+    fig_top_cc.update_traces(textfont_size=14, textposition="inside")
+    fig_top_cc.update_xaxes(visible=False)
+    fig_top_cc.update_yaxes(autorange="reversed", type='category', title="")
+    
+    # Ocupando 100% da tela sem estar preso em colunas estreitas
+    st.plotly_chart(fig_top_cc, use_container_width=True)
+else:
+    st.write("Sem registros abertos para os filtros aplicados.")
