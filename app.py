@@ -22,6 +22,9 @@ def carregar_dados():
     response.raise_for_status()
     df = pd.read_csv(io.StringIO(response.text))
     
+    # Limpeza de nomes de colunas (remove espaços extras que causam KeyError)
+    df.columns = df.columns.str.strip()
+    
     df['STATUS_CLEAN'] = df['STATUS'].astype(str).str.strip().str.upper()
     df['SLA'] = pd.to_numeric(df['SLA'], errors='coerce').fillna(0)
     df['DT EMISSAO'] = pd.to_datetime(df['DT Emissao'], errors='coerce')
@@ -88,25 +91,30 @@ with c_r:
     cols_c = st.columns(len(crit_counts))
     for i, (crit, qtd) in enumerate(crit_counts.items()): cols_c[i].metric(str(crit), qtd)
 
-# Top 10 SLA GLOBAL
 st.divider()
 st.subheader("⚠️ Top 10 Solicitações em Aberto (Maior SLA Global)")
 df_top10 = df_full[df_full['IS_ABERTA']].sort_values('SLA', ascending=False).drop_duplicates(subset=['Nº Solicitação (SC)']).head(10)
 st.dataframe(df_top10[['Nº Solicitação (SC)', 'Descricao', 'SLA', 'C Custo', 'Comprador']], use_container_width=True)
 
-# NOVOS RANKINGS (Filtro Mensal)
+# --- RANKINGS ---
 st.divider()
 col_rank1, col_rank2 = st.columns(2)
 
+# Defina aqui o nome exato conforme aparece na sua planilha (ex: 'Fornecedor')
+COL_FORN = 'Fornecedor' 
+
 with col_rank1:
-    st.subheader("🏆 Top 10 Fornecedores (Pedidos Fechados)")
-    df_fornecedores = df_f[df_f['Nº Pedido (PC)'].notna()].drop_duplicates(subset=['Nº Pedido (PC)'])
-    top_forn = df_fornecedores['Fornecedor'].value_counts().head(10).reset_index()
-    top_forn.columns = ['Fornecedor', 'Qtd Pedidos']
-    st.dataframe(top_forn, use_container_width=True)
+    st.subheader("🏆 Top 10 Fornecedores")
+    if COL_FORN in df_f.columns:
+        df_ped = df_f[df_f['Nº Pedido (PC)'].notna()].drop_duplicates(subset=['Nº Pedido (PC)'])
+        top_f = df_ped[COL_FORN].value_counts().head(10).reset_index()
+        top_f.columns = ['Fornecedor', 'Qtd Pedidos']
+        st.dataframe(top_f, use_container_width=True)
+    else:
+        st.warning(f"Coluna '{COL_FORN}' não encontrada. Verifique o nome na planilha.")
 
 with col_rank2:
     st.subheader("🛒 Top 10 Itens Mais Comprados")
-    top_itens = df_f['Descricao'].value_counts().head(10).reset_index()
-    top_itens.columns = ['Item/Descrição', 'Qtd Comprada']
-    st.dataframe(top_itens, use_container_width=True)
+    top_i = df_f['Descricao'].value_counts().head(10).reset_index()
+    top_i.columns = ['Item/Descrição', 'Qtd Comprada']
+    st.dataframe(top_i, use_container_width=True)
