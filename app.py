@@ -19,17 +19,26 @@ def carregar_dados():
     response.raise_for_status()
     df = pd.read_csv(io.StringIO(response.text))
     
-    # Limpeza para evitar erros de nomes de colunas
+    # 1. Limpeza automática de nomes de colunas
     df.columns = df.columns.str.strip()
     
-    # Busca dinâmica para garantir compatibilidade
-    cols = {c.upper().replace('Ã', 'A'): c for c in df.columns}
-    col_emissao = next((v for k, v in cols.items() if 'EMISSAO' in k), 'Data Emissao')
-    col_pedido = next((v for k, v in cols.items() if 'PEDIDO' in k and 'PC' not in k), 'Pedido')
+    # 2. Mapeamento de colunas para garantir que o código encontre o que precisa
+    # Se o nome na planilha for diferente, ajuste o valor à direita
+    mapa = {
+        'DATA EMISSAO': 'Data Emissao',
+        'PEDIDO': 'Pedido',
+        'SOLICITACAO': 'Solicitação',
+        'CENTRO DE CUSTO': 'Centro de Custo',
+        'FORNECEDOR': 'Fornecedor',
+        'DESCRICAO': 'Descricao',
+        'CRITICIDADE': 'Criticidade'
+    }
+    df.rename(columns={c: mapa.get(c.upper(), c) for c in df.columns}, inplace=True)
     
+    # 3. Tratamentos
     df['SLA'] = pd.to_numeric(df['SLA'], errors='coerce').fillna(0)
-    df['DT EMISSAO'] = pd.to_datetime(df[col_emissao], errors='coerce')
-    df['IS_ABERTA'] = df[col_pedido].isna() | (df[col_pedido].astype(str) == 'nan')
+    df['DT EMISSAO'] = pd.to_datetime(df['Data Emissao'], errors='coerce')
+    df['IS_ABERTA'] = df['Pedido'].isna() | (df['Pedido'].astype(str).str.upper() == 'NAN') | (df['Pedido'] == 0)
     
     # Lógica de Categorização
     df['CATEGORIA_COR'] = 'ATENÇÃO'
@@ -38,12 +47,12 @@ def carregar_dados():
     df.loc[df['IS_ABERTA'] & (df['SLA'] >= 10) & (df['SLA'] <= 15), 'CATEGORIA_COR'] = 'ATENÇÃO'
     df.loc[df['IS_ABERTA'] & (df['SLA'] > 15), 'CATEGORIA_COR'] = 'FORA DO PRAZO'
     
+    df['ANO'] = df['DT EMISSAO'].dt.year
     df['MES_NOME'] = df['DT EMISSAO'].dt.month_name().map({
         'January': 'Janeiro', 'February': 'Fevereiro', 'March': 'Março', 'April': 'Abril',
         'May': 'Maio', 'June': 'Junho', 'July': 'Julho', 'August': 'Agosto',
         'September': 'Setembro', 'October': 'Outubro', 'November': 'Novembro', 'December': 'Dezembro'
     })
-    df['ANO'] = df['DT EMISSAO'].dt.year
     return df
 
 df_full = carregar_dados()
@@ -66,7 +75,6 @@ df_sc_unicas = df_f.drop_duplicates(subset=['Solicitação'])
 # --- DASHBOARD ---
 st.title("📊 Dashboard Executivo de Compras")
 
-# QUADRANTE 1 E 2 (Gráficos)
 col_l, col_r = st.columns(2)
 
 with col_l:
@@ -89,7 +97,6 @@ with col_r:
 
 st.divider()
 
-# QUADRANTE 3 E 4 (Tabelas e Rankings)
 col_bl, col_br = st.columns(2)
 
 with col_bl:
@@ -100,9 +107,11 @@ with col_bl:
 with col_br:
     st.subheader("🏆 Fornecedor Principal (Volume)")
     df_ped = df_f[df_f['Pedido'].notna()].drop_duplicates(subset=['Pedido'])
-    if not df_ped.empty:
+    if not df_ped.empty and 'Fornecedor' in df_ped.columns:
         top_f = df_ped['Fornecedor'].value_counts().head(1)
         st.metric(f"Fornecedor: {top_f.index[0]}", f"{top_f.values[0]} pedidos")
+    else:
+        st.write("Dados de fornecedor indisponíveis.")
     
     st.subheader("🛒 Top 10 Itens Mais Comprados")
     top_i = df_f['Descricao'].value_counts().head(10).reset_index()
