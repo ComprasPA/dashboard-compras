@@ -9,7 +9,6 @@ import io
 st.set_page_config(page_title="Dashboard Executivo", layout="wide", initial_sidebar_state="expanded")
 
 # --- FUNÇÃO DO POP-UP (MODAL) ---
-# O parâmetro width="large" garante que a tabela fique bem espaçosa na tela
 @st.dialog("📋 Detalhes dos Registros", width="large")
 def abrir_modal(df_filtrado):
     st.write(f"**Total de registros encontrados:** {len(df_filtrado)}")
@@ -164,15 +163,16 @@ with c_r:
     fig_c = px.bar(crit_counts, y=c_crit, x=c_solic, text_auto=True, orientation='h', color_discrete_sequence=['#0f62fe'])
     
     fig_c.update_layout(**dark_layout)
-    fig_c.update_traces(textfont_size=32) 
+    # AJUSTE: Reduzido para 2/3 do tamanho (números internos para 21 e textos dos eixos para 16)
+    fig_c.update_traces(textfont_size=21) 
     fig_c.update_xaxes(visible=False) 
-    fig_c.update_yaxes(title="", tickfont=dict(size=24)) 
+    fig_c.update_yaxes(title="", tickfont=dict(size=16)) 
     
     st.plotly_chart(fig_c, use_container_width=True)
 
 st.markdown("<hr style='border-color: #2b2b40;'>", unsafe_allow_html=True)
 
-# --- GRÁFICOS QUADRANTE SUPERIOR COM POP-UP ---
+# --- GRÁFICOS QUADRANTE SUPERIOR ---
 col_graf1, col_graf2 = st.columns(2)
 
 with col_graf1:
@@ -202,7 +202,6 @@ with col_graf1:
     fig_top_solic.update_xaxes(visible=False)
     fig_top_solic.update_yaxes(autorange="reversed", type='category', title="", tickfont=dict(size=14))
     
-    # ATIVANDO O CLIQUE
     evento_solic = st.plotly_chart(fig_top_solic, use_container_width=True, on_select="rerun")
     if evento_solic and len(evento_solic.selection.get("points", [])) > 0:
         id_clicado = evento_solic.selection["points"][0]["y"]
@@ -226,7 +225,6 @@ with col_graf2:
     fig_top_itens.update_xaxes(visible=False)
     fig_top_itens.update_yaxes(autorange="reversed", title="", tickfont=dict(size=14))
     
-    # ATIVANDO O CLIQUE
     evento_item = st.plotly_chart(fig_top_itens, use_container_width=True, on_select="rerun")
     if evento_item and len(evento_item.selection.get("points", [])) > 0:
         nome_item_clicado = evento_item.selection["points"][0]["y"]
@@ -235,7 +233,7 @@ with col_graf2:
 
 st.markdown("<hr style='border-color: #2b2b40;'>", unsafe_allow_html=True)
 
-# --- GRÁFICO INFERIOR COM POP-UP ---
+# --- GRÁFICO INFERIOR ---
 st.markdown("#### 🏢 Top 10 Centros de Custo (Sol. Abertas por Criticidade)")
 
 df_cc_abertas = df_f[df_f['IS_ABERTA']].drop_duplicates(subset=[c_solic]).copy()
@@ -273,11 +271,9 @@ if not df_cc_abertas.empty:
     fig_top_cc.update_xaxes(visible=False)
     fig_top_cc.update_yaxes(autorange="reversed", type='category', title="", tickfont=dict(size=14))
     
-    # ATIVANDO O CLIQUE
     evento_cc = st.plotly_chart(fig_top_cc, use_container_width=True, on_select="rerun")
     if evento_cc and len(evento_cc.selection.get("points", [])) > 0:
         cc_clicado = evento_cc.selection["points"][0]["y"]
-        # Filtra os dados da tabela original para trazer apenas as solicitações abertas daquele Centro de Custo
         df_detalhe = df_f[(df_f[c_ccusto].astype(str) == str(cc_clicado)) & (df_f['IS_ABERTA'])]
         abrir_modal(df_detalhe)
 else:
