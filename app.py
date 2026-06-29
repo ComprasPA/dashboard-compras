@@ -5,12 +5,15 @@ import plotly.graph_objects as go
 import requests
 import io
 
+# Configuração da página
 st.set_page_config(page_title="Dashboard de Compras", layout="wide")
 
+# Configuração da planilha
 SHEET_ID = "1e7pQ512ge5XMnXxsRODEO7V48KgWo6FpKeITFqBSg1o"
 SHEET_NAME = "Solicitações"
 URL = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/gviz/tq?tqx=out:csv&sheet={SHEET_NAME}"
 
+# Mapeamento de cores
 CORES_STATUS = {
     'FINALIZADO': '#28a745', 'ATENÇÃO': '#ffc107',
     'FORA DO PRAZO': '#dc3545', 'NO PRAZO': '#007bff'
@@ -22,6 +25,7 @@ def carregar_dados():
     response.raise_for_status()
     df = pd.read_csv(io.StringIO(response.text))
     
+    # Tratamentos
     df['STATUS_CLEAN'] = df['STATUS'].astype(str).str.strip().str.upper()
     df['SLA'] = pd.to_numeric(df['SLA'], errors='coerce')
     df['DT EMISSAO'] = pd.to_datetime(df['DT Emissao'], errors='coerce')
@@ -53,7 +57,7 @@ mes_sel = st.sidebar.multiselect("Mês:", ['Janeiro', 'Fevereiro', 'Março', 'Ab
 cc_sel = st.sidebar.multiselect("Centro de Custo:", sorted(df_full['C Custo'].dropna().unique().tolist()))
 status_sel = st.sidebar.multiselect("Status:", list(CORES_STATUS.keys()))
 
-# Aplicação dos Filtros (se vazio, mostra tudo)
+# Aplicação dos Filtros
 df_filtrado = df_full.copy()
 if ano_sel: df_filtrado = df_filtrado[df_filtrado['ANO'].isin(ano_sel)]
 if mes_sel: df_filtrado = df_filtrado[df_filtrado['MES_NOME'].isin(mes_sel)]
@@ -74,7 +78,7 @@ col4.metric("SLA Médio (Dias)", round(df_unicos['SLA'].mean(), 1))
 
 st.divider()
 
-# Visualização
+# Gráficos
 c_left, c_right = st.columns(2)
 with c_left:
     st.subheader("Distribuição de Status")
@@ -90,6 +94,17 @@ with c_right:
                       x='Criticidade', y='Nº Solicitação (SC)', text_auto=True)
     st.plotly_chart(fig_crit, use_container_width=True)
 
+# Top 10 SLA
 st.divider()
-st.subheader("Detalhamento das Solicitações")
-st.dataframe(df_unicos[['Nº Solicitação (SC)', 'Descricao', 'SLA', 'C Custo', 'Comprador', 'CATEGORIA_COR']], use_container_width=True)
+st.subheader("⚠️ Top 10 Solicitações com Maior SLA")
+df_pendentes = df_unicos[~df_unicos['STATUS_CLEAN'].str.contains('FINALIZADO', na=False)].sort_values(by='SLA', ascending=False).head(10)
+
+if not df_pendentes.empty:
+    fig_top10 = px.bar(df_pendentes, x='SLA', y='Nº Solicitação (SC)', orientation='h',
+                       color='CATEGORIA_COR', color_discrete_map=CORES_STATUS, text='SLA',
+                       title="Solicitações com maior tempo de espera")
+    fig_top10.update_layout(yaxis={'categoryorder':'total ascending'})
+    st.plotly_chart(fig_top10, use_container_width=True)
+    st.dataframe(df_pendentes[['Nº Solicitação (SC)', 'Descricao', 'SLA', 'C Custo', 'Comprador']], use_container_width=True)
+else:
+    st.info("Nenhuma solicitação em aberto encontrada.")
