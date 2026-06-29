@@ -129,27 +129,26 @@ with c_l:
     st.markdown("#### Distribuição de Status")
     status_counts = df_sc_unicas['CATEGORIA_COR'].value_counts()
     
-    col_texto_pizza, col_grafico_pizza = st.columns([1, 1.5])
+    # Gráfico de Pizza com legenda à direita e apenas percentual dentro
+    fig_p = go.Figure(data=[go.Pie(
+        labels=status_counts.index, 
+        values=status_counts.values, 
+        marker=dict(colors=[CORES_STATUS.get(x, '#888') for x in status_counts.index]), 
+        textinfo='percent', # Alterado para mostrar apenas o percentual
+        textfont=dict(color='white', size=14),
+        hole=0.4
+    )])
     
-    with col_texto_pizza:
-        st.write("<br>", unsafe_allow_html=True)
-        if len(status_counts) > 0:
-            for status, qtd in status_counts.items(): 
-                st.metric(status, qtd)
-                
-    with col_grafico_pizza:
-        fig_p = go.Figure(data=[go.Pie(
-            labels=status_counts.index, 
-            values=status_counts.values, 
-            marker=dict(colors=[CORES_STATUS.get(x, '#888') for x in status_counts.index]), 
-            textinfo='percent+label', # Alterado aqui para percentual
-            textfont=dict(color='white', size=14),
-            hole=0.4
-        )])
-        
-        fig_p.update_layout(**dark_layout)
-        fig_p.update_layout(showlegend=False)
-        st.plotly_chart(fig_p, use_container_width=True)
+    fig_p.update_layout(**dark_layout)
+    # Garante que a legenda apareça nativamente no Plotly
+    fig_p.update_layout(showlegend=True) 
+    st.plotly_chart(fig_p, use_container_width=True)
+    
+    # Números absolutos abaixo do gráfico
+    if len(status_counts) > 0:
+        cols_s = st.columns(len(status_counts))
+        for i, (status, qtd) in enumerate(status_counts.items()): 
+            cols_s[i].metric(status, qtd)
 
 with c_r:
     st.markdown("#### Volume por Criticidade")
