@@ -186,7 +186,6 @@ with col_graf1:
         color_discrete_sequence=['#e91e63']
     )
     
-    # Reduzido para 18
     fig_top_solic.update_traces(
         textposition='inside', 
         textfont_size=18,
@@ -194,7 +193,6 @@ with col_graf1:
     )
     fig_top_solic.update_layout(**dark_layout)
     fig_top_solic.update_xaxes(visible=False)
-    # Eixo reduzido para 14
     fig_top_solic.update_yaxes(autorange="reversed", type='category', title="", tickfont=dict(size=14))
     
     st.plotly_chart(fig_top_solic, use_container_width=True)
@@ -212,11 +210,8 @@ with col_graf2:
     
     fig_top_itens = px.bar(top_itens, x='Vezes Solicitado', y='Item/Descrição', text_auto=True, orientation='h', color_discrete_sequence=['#00c853'])
     fig_top_itens.update_layout(**dark_layout)
-    
-    # Reduzido para 18
     fig_top_itens.update_traces(textfont_size=18)
     fig_top_itens.update_xaxes(visible=False)
-    # Eixo reduzido para 14
     fig_top_itens.update_yaxes(autorange="reversed", title="", tickfont=dict(size=14))
     
     st.plotly_chart(fig_top_itens, use_container_width=True)
@@ -235,20 +230,29 @@ if not df_cc_abertas.empty:
     
     cols_crit = [col for col in top_cc.columns if col not in [c_ccusto, 'Total Geral']]
     
+    # Mapeamento para garantir que as variações de "compras direta" fiquem verdes
+    mapa_cores_crit = {
+        'compras direta': '#00c853',
+        'Compras Direta': '#00c853',
+        'COMPRAS DIRETA': '#00c853',
+        'compra direta': '#00c853',
+        'Compra Direta': '#00c853',
+        'COMPRA DIRETA': '#00c853'
+    }
+    
     fig_top_cc = px.bar(
         top_cc, 
         y=c_ccusto, 
         x=cols_crit, 
         orientation='h', 
         text_auto=True,
-        color_discrete_sequence=['#0f62fe', '#ffb300', '#e91e63']
+        color_discrete_map=mapa_cores_crit,
+        color_discrete_sequence=['#0f62fe', '#ffb300', '#e91e63'] # Cores padrão para o restante
     )
     
     fig_top_cc.update_layout(**dark_layout, barmode='stack')
-    # Reduzido para 18
     fig_top_cc.update_traces(textfont_size=18, textposition="inside")
     fig_top_cc.update_xaxes(visible=False)
-    # Eixo reduzido para 14
     fig_top_cc.update_yaxes(autorange="reversed", type='category', title="", tickfont=dict(size=14))
     
     st.plotly_chart(fig_top_cc, use_container_width=True)
