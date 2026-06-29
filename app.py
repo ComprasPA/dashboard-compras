@@ -7,7 +7,7 @@ import io
 # Configuração da página
 st.set_page_config(page_title="Dashboard de Compras", layout="wide")
 
-# Conexão com Google Sheets
+# Configuração da planilha
 SHEET_ID = "1e7pQ512ge5XMnXxsRODEO7V48KgWo6FpKeITFqBSg1o"
 SHEET_NAME = "Solicitações"
 URL = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/gviz/tq?tqx=out:csv&sheet={SHEET_NAME}"
@@ -23,15 +23,23 @@ def carregar_dados():
     df['SLA'] = pd.to_numeric(df['SLA'], errors='coerce')
     df['DT EMISSAO'] = pd.to_datetime(df['DT Emissao'], errors='coerce')
     df['MES_NOME'] = df['DT EMISSAO'].dt.month_name()
+    
+    # Mapeamento para meses em Português
+    meses_pt = {
+        'January': 'Janeiro', 'February': 'Fevereiro', 'March': 'Março', 'April': 'Abril',
+        'May': 'Maio', 'June': 'Junho', 'July': 'Julho', 'August': 'Agosto',
+        'September': 'Setembro', 'October': 'Outubro', 'November': 'Novembro', 'December': 'Dezembro'
+    }
+    df['MES_NOME'] = df['MES_NOME'].map(meses_pt)
     df['ANO'] = df['DT EMISSAO'].dt.year
     return df
 
 df_full = carregar_dados()
 
-# --- BARRA LATERAL (Filtros) ---
-st.sidebar.title("Filtros de Período")
+# --- BARRA LATERAL ---
+st.sidebar.title("Configurações")
 ano_sel = st.sidebar.selectbox("Ano:", sorted(df_full['ANO'].dropna().unique()))
-mes_sel = st.sidebar.selectbox("Mês:", sorted(df_full['MES_NOME'].unique()))
+mes_sel = st.sidebar.selectbox("Mês:", ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'])
 
 df_filtrado = df_full[(df_full['ANO'] == ano_sel) & (df_full['MES_NOME'] == mes_sel)]
 df_unicos = df_filtrado.drop_duplicates(subset=['Nº Solicitação (SC)'])
@@ -39,25 +47,25 @@ df_unicos = df_filtrado.drop_duplicates(subset=['Nº Solicitação (SC)'])
 # --- VISÃO GERAL ---
 st.title(f"📊 Dashboard de Compras - {mes_sel}/{ano_sel}")
 
-# Métricas de Performance
 num_pedidos = df_unicos[df_unicos['Nº Pedido (PC)'].notna()]['Nº Pedido (PC)'].nunique()
 sol_fechadas = df_unicos[df_unicos['STATUS_CLEAN'] == 'FINALIZADO'].shape[0]
 sol_abertas = df_unicos[df_unicos['STATUS_CLEAN'] == 'PENDENTE'].shape[0]
+sla_medio = round(df_unicos['SLA'].mean(), 1) if not df_unicos['SLA'].isna().all() else 0
 
 c1, c2, c3, c4 = st.columns(4)
 c1.metric("Pedidos Emitidos", num_pedidos)
 c2.metric("Sol. Fechadas", sol_fechadas)
 c3.metric("Sol. Abertas", sol_abertas)
-c4.metric("SLA Médio (Dias)", round(df_unicos['SLA'].mean(), 1))
+c4.metric("SLA Médio (Dias)", sla_medio)
 
 st.divider()
 
 # Gráfico de Status
-fig = px.pie(df_unicos, names='STATUS_CLEAN', title="Distribuição de Status")
+fig = px.pie(df_unicos, names='STATUS_CLEAN', title="Distribuição de Status das Solicitações")
 st.plotly_chart(fig, use_container_width=True)
 
-# --- CURVA ABC E PENDÊNCIAS ---
-tab1, tab2 = st.tabs(["📦 Curva ABC (C.Custo)", "⚠️ Pendências de SLA"])
+# --- TABS ---
+tab1, tab2 = st.tabs(["📦 Curva ABC (Centros de Custo)", "⚠️ Gestão de Pendências"])
 
 with tab1:
     st.subheader("Top 10 Centros de Custo")
@@ -67,4 +75,6 @@ with tab1:
 with tab2:
     st.subheader("Solicitações em Aberto (Maiores SLAs)")
     pendentes = df_unicos[df_unicos['STATUS_CLEAN'] == 'PENDENTE'].sort_values(by='SLA', ascending=False)
-    st.dataframe(pendentes[['Nº Solicitação (SC)', 'Descricao', 'SLA', 'C Custo', 'Comprador']], use_container_width=True)
+    # Renomeando colunas para exibição amigável
+    display_df = pendentes.rename(columns={'Nº Solicitação (SC)': 'Número SC', 'Descricao': 'Descrição', 'C Custo': 'Centro de Custo'})
+    st.dataframe(display_df[['Número SC', 'Descrição', 'SLA', 'Centro de Custo', 'Comprador']], use_container_width=True)
