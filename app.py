@@ -232,20 +232,18 @@ with col_graf2:
 
 st.markdown("<hr style='border-color: #2b2b40;'>", unsafe_allow_html=True)
 
-# --- GRÁFICO INFERIOR RESTAURADO ---
+# --- GRÁFICO INFERIOR (INTERATIVIDADE INTERNA POR SÉRIE) ---
 st.markdown("#### 🏢 Top 10 Centros de Custo (Sol. Abertas por Criticidade)")
 
 df_cc_abertas = df_f[df_f['IS_ABERTA']].drop_duplicates(subset=[c_solic]).copy()
 
 if not df_cc_abertas.empty:
-    # Agrupamento estável em formato wide (colunas)
     top_cc = df_cc_abertas.groupby([c_ccusto, c_crit])[c_solic].nunique().unstack(fill_value=0)
     top_cc['Total Geral'] = top_cc.sum(axis=1)
     top_cc = top_cc.sort_values(by='Total Geral', ascending=False).head(10).reset_index()
     
     cols_crit = [col for col in top_cc.columns if col not in [c_ccusto, 'Total Geral']]
     
-    # Mapeamento dinâmico de cores por string parcial
     mapa_cores_crit = {}
     for col in cols_crit:
         col_str = str(col).lower().strip()
@@ -273,10 +271,23 @@ if not df_cc_abertas.empty:
     fig_top_cc.update_yaxes(autorange="reversed", type='category', title="", tickfont=dict(size=14))
     
     evento_cc = st.plotly_chart(fig_top_cc, use_container_width=True, on_select="rerun")
+    
+    # Lógica de extração do clique baseada na série selecionada
     if evento_cc and len(evento_cc.selection.get("points", [])) > 0:
-        cc_clicado = evento_cc.selection["points"][0]["y"]
-        # Filtragem consolidada pelo Centro de Custo estável
-        df_detalhe = df_f[(df_f[c_ccusto].astype(str) == str(cc_clicado)) & (df_f['IS_ABERTA'])]
-        abrir_modal(df_detalhe)
+        ponto_selecionado = evento_cc.selection["points"][0]
+        cc_clicado = ponto_selecionado["y"]
+        curve_idx = ponto_selecionado.get("curveNumber", 0) # Captura qual índice de série foi clicado
+        
+        # Mapeia o índice de volta para a coluna correspondente de criticidade
+        if curve_idx < len(cols_crit):
+            crit_clicada = cols_crit[curve_idx]
+            
+            # Filtra os dados originais trazendo o cruzamento do CC com a Criticidade exata
+            df_detalhe = df_f[
+                (df_f[c_ccusto].astype(str) == str(cc_clicado)) & 
+                (df_f[c_crit].astype(str) == str(crit_clicada)) & 
+                (df_f['IS_ABERTA'])
+            ]
+            abrir_modal(df_detalhe)
 else:
     st.write("Sem registros abertos para os filtros aplicados.")
