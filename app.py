@@ -14,7 +14,7 @@ def abrir_modal(df_filtrado):
     st.write(f"**Total de solicitações únicas encontradas:** {len(df_filtrado)}")
     st.dataframe(df_filtrado, use_container_width=True, hide_index=True)
 
-# --- CUSTOM CSS (ESTILO DARK E CARDS NEON) ---
+# --- CUSTOM CSS ---
 st.markdown("""
 <style>
     .stApp { background-color: #13152a; }
@@ -62,6 +62,7 @@ def carregar_dados():
     c_desc = find_col(['DESC'])
     c_solic = find_col(['SOLICITAÇÃO', 'SOLICITACAO'])
     c_crit = find_col(['CRITICIDADE'])
+    c_status = find_col(['STATUS', 'SITUAÇÃO', 'SITUACAO']) # Novo localizador
 
     df['SLA'] = pd.to_numeric(df['SLA'], errors='coerce').fillna(0)
     df['DT_DT'] = pd.to_datetime(df[c_emissao], errors='coerce')
@@ -76,10 +77,11 @@ def carregar_dados():
 
     df['ANO'] = df['DT_DT'].dt.year
     df['MES_NOME'] = df['DT_DT'].dt.month_name()
-    return df, c_pedido, c_solic, c_ccusto, c_desc, c_crit, c_emissao
+    return df, c_pedido, c_solic, c_ccusto, c_desc, c_crit, c_emissao, c_status
 
-df_full, c_pedido, c_solic, c_ccusto, c_desc, c_crit, c_emissao = carregar_dados()
-colunas_exibir = [col for col in [c_solic, c_desc, c_ccusto, c_crit, c_emissao, 'SLA'] if col is not None]
+df_full, c_pedido, c_solic, c_ccusto, c_desc, c_crit, c_emissao, c_status = carregar_dados()
+# Adicionado c_status na lista de exibição
+colunas_exibir = [col for col in [c_solic, c_status, c_desc, c_ccusto, c_crit, c_emissao, 'SLA'] if col is not None]
 
 # --- FILTROS ---
 st.sidebar.title("Filtros")
@@ -193,6 +195,7 @@ if not df_cc_abertas.empty:
     top_10_cc_nomes = totais_cc.sort_values(by='Total', ascending=False).head(10)[c_ccusto].tolist()
     df_top10_cc = df_cc_abertas[df_cc_abertas[c_ccusto].isin(top_10_cc_nomes)]
     df_plot_cc = df_top10_cc.groupby([c_ccusto, c_crit])[c_solic].nunique().reset_index(name='Quantidade')
+    df_totals = df_plot_cc.groupby(c_ccusto)['Quantidade'].sum().reset_index()
     
     mapa_cores_crit = {}
     for crit in df_plot_cc[c_crit].unique():
@@ -203,9 +206,13 @@ if not df_cc_abertas.empty:
         else: mapa_cores_crit[crit] = '#ffb300'      
     
     fig_top_cc = px.bar(df_plot_cc, y=c_ccusto, x='Quantidade', color=c_crit, orientation='h', text_auto=True, custom_data=[c_crit], color_discrete_map=mapa_cores_crit)
-    fig_top_cc.update_layout(**dark_layout, barmode='stack')
-    fig_top_cc.update_traces(textfont_size=18, textposition="inside")
-    fig_top_cc.update_xaxes(visible=False)
+    
+    for _, row in df_totals.iterrows():
+        fig_top_cc.add_annotation(y=row[c_ccusto], x=row['Quantidade'], text=f" <b>Total: {row['Quantidade']}</b>", showarrow=False, xanchor='left', xshift=10, font=dict(color='#ffffff', size=14))
+    
+    fig_top_cc.update_layout(**dark_layout, barmode='stack', margin=dict(t=30, b=30, l=30, r=120))
+    fig_top_cc.update_traces(textfont_size=14, textposition="inside")
+    fig_top_cc.update_xaxes(visible=False, range=[0, df_totals['Quantidade'].max() * 1.4])
     fig_top_cc.update_yaxes(type='category', categoryorder='array', categoryarray=top_10_cc_nomes[::-1], title="", tickfont=dict(size=14))
     
     evento_cc = st.plotly_chart(fig_top_cc, use_container_width=True, on_select="rerun", config={'displayModeBar': False})
