@@ -92,8 +92,9 @@ with c_right:
                       x='Criticidade', y='Nº Solicitação (SC)', text_auto=True)
     st.plotly_chart(fig_crit, use_container_width=True)
 
-# Top 10 SLA (Apenas Tabela)
+# Top 10 SLA ABERTAS
 st.divider()
-st.subheader("⚠️ Top 10 Solicitações com Maior SLA")
+st.subheader("⚠️ Top 10 Solicitações em Aberto (Maiores SLAs)")
+# Filtragem rigorosa para garantir apenas o que NÃO é finalizado
 df_top10 = df_unicos[~df_unicos['STATUS_CLEAN'].str.contains('FINALIZADO', na=False)].sort_values(by='SLA', ascending=False).head(10)
 st.dataframe(df_top10[['Nº Solicitação (SC)', 'Descricao', 'SLA', 'C Custo', 'Comprador']], use_container_width=True)
