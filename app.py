@@ -17,32 +17,30 @@ def carregar_dados():
     response.raise_for_status()
     df = pd.read_csv(io.StringIO(response.text))
     
-    # Tratamentos
+    # Tratamentos básicos
     df['STATUS_CLEAN'] = df['STATUS'].astype(str).str.strip().str.upper()
     df['SLA'] = pd.to_numeric(df['SLA'], errors='coerce')
     df['DT EMISSAO'] = pd.to_datetime(df['DT Emissao'], errors='coerce')
+    
+    # Criar colunas de mês e ano para filtragem
+    df['MES_NUM'] = df['DT EMISSAO'].dt.month
+    df['ANO'] = df['DT EMISSAO'].dt.year
+    df['MES_NOME'] = df['DT EMISSAO'].dt.month_name()
     return df
 
 df_full = carregar_dados()
 
-# --- FILTRO NA BARRA LATERAL ---
+# --- FILTRO POR MÊS NA BARRA LATERAL ---
 st.sidebar.title("Filtros")
-data_min = df_full['DT EMISSAO'].min().date()
-data_max = df_full['DT EMISSAO'].max().date()
+ano_selecionado = st.sidebar.selectbox("Selecione o Ano:", sorted(df_full['ANO'].dropna().unique()))
+mes_selecionado = st.sidebar.selectbox("Selecione o Mês:", sorted(df_full['MES_NOME'].unique()))
 
-intervalo = st.sidebar.date_input("Selecione o período:", [data_min, data_max])
-
-# Aplica o filtro se o usuário selecionar duas datas
-if len(intervalo) == 2:
-    inicio, fim = intervalo
-    df_filtrado = df_full[(df_full['DT EMISSAO'].dt.date >= inicio) & (df_full['DT EMISSAO'].dt.date <= fim)]
-else:
-    df_filtrado = df_full
-
+# Filtragem dos dados
+df_filtrado = df_full[(df_full['ANO'] == ano_selecionado) & (df_full['MES_NOME'] == mes_selecionado)]
 df_unicos = df_filtrado.drop_duplicates(subset=['Nº Solicitação (SC)'])
 
-# --- VISÃO GERAL (Atualizada com o Filtro) ---
-st.title("📊 Dashboard de Compras")
+# --- VISÃO GERAL ---
+st.title(f"📊 Dashboard de Compras - {mes_selecionado}/{ano_selecionado}")
 
 col1, col2, col3, col4 = st.columns(4)
 col1.metric("Pendentes", df_unicos[df_unicos['STATUS_CLEAN'] == 'PENDENTE'].shape[0])
@@ -52,7 +50,12 @@ col4.metric("Fora do Prazo", df_unicos[df_unicos['SLA'] > 15].shape[0])
 
 st.divider()
 
-# Gráfico de Status do Período Selecionado
+# Gráfico de Status do Mês selecionado
 df_status = df_unicos['STATUS_CLEAN'].value_counts().reset_index()
-fig = px.pie(df_status, values='count', names='STATUS_CLEAN', title="Distribuição de Status no Período")
+fig = px.pie(df_status, values='count', names='STATUS_CLEAN', title=f"Status das Solicitações em {mes_selecionado}")
 st.plotly_chart(fig, use_container_width=True)
+
+# Curva ABC rápida do mês
+st.subheader("📦 Curva ABC de Centros de Custo (Mês Selecionado)")
+df_cc = df_unicos.groupby('C Custo')['Nº Solicitação (SC)'].nunique().sort_values(ascending=False).head(10).reset_index()
+st.bar_chart(df_cc.set_index('C Custo'))
