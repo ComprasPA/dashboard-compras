@@ -186,16 +186,16 @@ with col_graf1:
         color_discrete_sequence=['#e91e63']
     )
     
-    # AJUSTE: Fonte interna dobrada para 28
+    # Reduzido para 18
     fig_top_solic.update_traces(
         textposition='inside', 
-        textfont_size=28,
+        textfont_size=18,
         hovertemplate="<b>Solicitação:</b> %{y}<br><b>SLA:</b> %{x} dias<br><b>Item:</b> %{customdata[0]}<extra></extra>"
     )
     fig_top_solic.update_layout(**dark_layout)
     fig_top_solic.update_xaxes(visible=False)
-    # AJUSTE: Texto das categorias aumentado para 20
-    fig_top_solic.update_yaxes(autorange="reversed", type='category', title="", tickfont=dict(size=20))
+    # Eixo reduzido para 14
+    fig_top_solic.update_yaxes(autorange="reversed", type='category', title="", tickfont=dict(size=14))
     
     st.plotly_chart(fig_top_solic, use_container_width=True)
 
@@ -212,11 +212,12 @@ with col_graf2:
     
     fig_top_itens = px.bar(top_itens, x='Vezes Solicitado', y='Item/Descrição', text_auto=True, orientation='h', color_discrete_sequence=['#00c853'])
     fig_top_itens.update_layout(**dark_layout)
-    # AJUSTE: Fonte interna dobrada para 28
-    fig_top_itens.update_traces(textfont_size=28)
+    
+    # Reduzido para 18
+    fig_top_itens.update_traces(textfont_size=18)
     fig_top_itens.update_xaxes(visible=False)
-    # AJUSTE: Texto das categorias aumentado para 20
-    fig_top_itens.update_yaxes(autorange="reversed", title="", tickfont=dict(size=20))
+    # Eixo reduzido para 14
+    fig_top_itens.update_yaxes(autorange="reversed", title="", tickfont=dict(size=14))
     
     st.plotly_chart(fig_top_itens, use_container_width=True)
 
@@ -244,11 +245,11 @@ if not df_cc_abertas.empty:
     )
     
     fig_top_cc.update_layout(**dark_layout, barmode='stack')
-    # AJUSTE: Fonte interna dobrada para 28
-    fig_top_cc.update_traces(textfont_size=28, textposition="inside")
+    # Reduzido para 18
+    fig_top_cc.update_traces(textfont_size=18, textposition="inside")
     fig_top_cc.update_xaxes(visible=False)
-    # AJUSTE: Texto das categorias aumentado para 20
-    fig_top_cc.update_yaxes(autorange="reversed", type='category', title="", tickfont=dict(size=20))
+    # Eixo reduzido para 14
+    fig_top_cc.update_yaxes(autorange="reversed", type='category', title="", tickfont=dict(size=14))
     
     st.plotly_chart(fig_top_cc, use_container_width=True)
 else:
