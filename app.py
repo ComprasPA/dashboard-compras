@@ -20,7 +20,6 @@ def carregar_dados():
     df = pd.read_csv(io.StringIO(response.text))
     df.columns = df.columns.str.strip()
 
-    # Busca dinâmica de colunas (ignora maiúsculas/minúsculas)
     def find_col(keywords):
         for col in df.columns:
             if any(k in col.upper() for k in keywords): return col
@@ -37,8 +36,6 @@ def carregar_dados():
     df['SLA'] = pd.to_numeric(df['SLA'], errors='coerce').fillna(0)
     df['DT_DT'] = pd.to_datetime(df[c_emissao], errors='coerce')
     df['IS_ABERTA'] = df[c_pedido].isna() | (df[c_pedido].astype(str).str.lower() == 'nan')
-    
-    # Garantir Qtd numérica
     df['Qtd_Num'] = pd.to_numeric(df[c_qtd], errors='coerce').fillna(0) if c_qtd else 0
 
     df['CATEGORIA_COR'] = 'ATENÇÃO'
@@ -57,10 +54,13 @@ df_full, c_pedido, c_solic, c_ccusto, c_desc, c_crit = carregar_dados()
 st.sidebar.header("Filtros de Visão")
 anos_disp = sorted(df_full['ANO'].dropna().unique())
 ano_sel = st.sidebar.multiselect("Ano:", anos_disp, default=anos_disp)
+meses_todos = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December']
+mes_sel = st.sidebar.multiselect("Mês:", meses_todos, default=meses_todos)
 cc_sel = st.sidebar.multiselect("Centro de Custo:", sorted(df_full[c_ccusto].dropna().unique().tolist()))
 
 df_f = df_full.copy()
 if ano_sel: df_f = df_f[df_f['ANO'].isin(ano_sel)]
+if mes_sel: df_f = df_f[df_f['MES_NOME'].isin(mes_sel)]
 if cc_sel: df_f = df_f[df_f[c_ccusto].isin(cc_sel)]
 df_sc_unicas = df_f.drop_duplicates(subset=[c_solic])
 
@@ -90,7 +90,7 @@ with c_r:
 st.divider()
 
 st.subheader("⚠️ Top 10 Solicitações em Aberto")
-st.dataframe(df_full[df_full['IS_ABERTA']].sort_values('SLA', ascending=False).drop_duplicates(subset=[c_solic]).head(10)[[c_solic, c_desc, 'SLA', c_ccusto]], use_container_width=True)
+st.dataframe(df_f[df_f['IS_ABERTA']].sort_values('SLA', ascending=False).drop_duplicates(subset=[c_solic]).head(10)[[c_solic, c_desc, 'SLA', c_ccusto]], use_container_width=True)
 
 st.divider()
 st.subheader("🛒 Top 10 Itens Mais Comprados (Volume)")
