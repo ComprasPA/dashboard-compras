@@ -22,11 +22,12 @@ def carregar_dados():
     response.raise_for_status()
     df = pd.read_csv(io.StringIO(response.text))
     
-    # Limpeza de nomes de colunas (remove espaços extras que causam KeyError)
     df.columns = df.columns.str.strip()
     
     df['STATUS_CLEAN'] = df['STATUS'].astype(str).str.strip().str.upper()
     df['SLA'] = pd.to_numeric(df['SLA'], errors='coerce').fillna(0)
+    # Garante que a coluna Qtd seja numérica para soma
+    df['Qtd'] = pd.to_numeric(df['Qtd'], errors='coerce').fillna(0)
     df['DT EMISSAO'] = pd.to_datetime(df['DT Emissao'], errors='coerce')
     df['IS_ABERTA'] = df['Nº Pedido (PC)'].isna() | (df['Nº Pedido (PC)'].astype(str) == 'nan')
     
@@ -64,6 +65,7 @@ df_sc_unicas = df_f.drop_duplicates(subset=['Nº Solicitação (SC)'])
 # --- DASHBOARD ---
 st.title("📊 Dashboard Executivo de Compras")
 
+# Métricas Principais
 col1, col2, col3, col4 = st.columns(4)
 col1.metric("Pedidos Emitidos", df_sc_unicas['Nº Pedido (PC)'].nunique())
 col2.metric("Sol. Fechadas", df_sc_unicas[~df_sc_unicas['IS_ABERTA']].shape[0])
@@ -72,49 +74,33 @@ col4.metric("SLA Médio (Abertas)", round(df_sc_unicas[df_sc_unicas['IS_ABERTA']
 
 st.divider()
 
+# Gráficos
 c_l, c_r = st.columns(2)
 with c_l:
     st.subheader("Distribuição de Status")
     status_counts = df_sc_unicas['CATEGORIA_COR'].value_counts()
-    fig_p = go.Figure(data=[go.Pie(labels=status_counts.index, values=status_counts.values, 
-                                   marker=dict(colors=[CORES_STATUS.get(x, '#ccc') for x in status_counts.index]),
-                                   textinfo='percent+label', hole=0.3)])
+    fig_p = go.Figure(data=[go.Pie(labels=status_counts.index, values=status_counts.values, marker=dict(colors=[CORES_STATUS.get(x, '#ccc') for x in status_counts.index]), hole=0.3)])
     st.plotly_chart(fig_p, use_container_width=True)
-    cols_s = st.columns(len(status_counts))
-    for i, (status, qtd) in enumerate(status_counts.items()): cols_s[i].metric(status, qtd)
 
 with c_r:
     st.subheader("Volume por Criticidade")
-    crit_counts = df_sc_unicas.groupby('Criticidade')['Nº Solicitação (SC)'].nunique()
-    fig_c = px.bar(crit_counts.reset_index(), x='Criticidade', y='Nº Solicitação (SC)', text_auto=True)
+    fig_c = px.bar(df_sc_unicas.groupby('Criticidade')['Nº Solicitação (SC)'].nunique().reset_index(), x='Criticidade', y='Nº Solicitação (SC)', text_auto=True)
     st.plotly_chart(fig_c, use_container_width=True)
-    cols_c = st.columns(len(crit_counts))
-    for i, (crit, qtd) in enumerate(crit_counts.items()): cols_c[i].metric(str(crit), qtd)
 
 st.divider()
+
+# Top 10 Solicitações em Aberto
 st.subheader("⚠️ Top 10 Solicitações em Aberto (Maior SLA Global)")
 df_top10 = df_full[df_full['IS_ABERTA']].sort_values('SLA', ascending=False).drop_duplicates(subset=['Nº Solicitação (SC)']).head(10)
 st.dataframe(df_top10[['Nº Solicitação (SC)', 'Descricao', 'SLA', 'C Custo', 'Comprador']], use_container_width=True)
 
-# --- RANKINGS ---
+# --- RANKING DE ITENS MAIS COMPRADOS ---
 st.divider()
-col_rank1, col_rank2 = st.columns(2)
+st.subheader("🛒 Top 10 Itens por Volume de Quantidade (Filtro Mensal)")
 
-# Defina aqui o nome exato conforme aparece na sua planilha (ex: 'Fornecedor')
-COL_FORN = 'Fornecedor' 
+# Agrupa por Descrição e soma a coluna 'Qtd'
+top_itens = df_f.groupby('Descricao')['Qtd'].sum().reset_index()
+top_itens = top_itens.sort_values(by='Qtd', ascending=False).head(10)
+top_itens.columns = ['Item/Descrição', 'Volume Total Comprado']
 
-with col_rank1:
-    st.subheader("🏆 Top 10 Fornecedores")
-    if COL_FORN in df_f.columns:
-        df_ped = df_f[df_f['Nº Pedido (PC)'].notna()].drop_duplicates(subset=['Nº Pedido (PC)'])
-        top_f = df_ped[COL_FORN].value_counts().head(10).reset_index()
-        top_f.columns = ['Fornecedor', 'Qtd Pedidos']
-        st.dataframe(top_f, use_container_width=True)
-    else:
-        st.warning(f"Coluna '{COL_FORN}' não encontrada. Verifique o nome na planilha.")
-
-with col_rank2:
-    st.subheader("🛒 Top 10 Itens Mais Comprados")
-    top_i = df_f['Descricao'].value_counts().head(10).reset_index()
-    top_i.columns = ['Item/Descrição', 'Qtd Comprada']
-    st.dataframe(top_i, use_container_width=True)
+st.dataframe(top_itens, use_container_width=True)
