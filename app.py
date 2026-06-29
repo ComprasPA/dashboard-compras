@@ -68,6 +68,7 @@ def carregar_dados():
     c_desc = find_col(['DESC'])
     c_solic = find_col(['SOLICITAÇÃO', 'SOLICITACAO'])
     c_crit = find_col(['CRITICIDADE'])
+    c_status = find_col(['STATUS', 'SITUAÇÃO', 'SITUACAO'])
 
     df['SLA'] = pd.to_numeric(df['SLA'], errors='coerce').fillna(0)
     df['DT_DT'] = pd.to_datetime(df[c_emissao], errors='coerce')
@@ -82,7 +83,7 @@ def carregar_dados():
 
     df['ANO'] = df['DT_DT'].dt.year
     
-    # Dicionário de tradução dos meses para Português BR
+    # Tradução dos meses
     mapa_meses = {
         'January': 'Janeiro', 'February': 'Fevereiro', 'March': 'Março',
         'April': 'Abril', 'May': 'Maio', 'June': 'Junho',
@@ -91,17 +92,16 @@ def carregar_dados():
     }
     df['MES_NOME'] = df['DT_DT'].dt.month_name().map(mapa_meses)
     
-    return df, c_pedido, c_solic, c_ccusto, c_desc, c_crit, c_emissao
+    return df, c_pedido, c_solic, c_ccusto, c_desc, c_crit, c_emissao, c_status
 
-df_full, c_pedido, c_solic, c_ccusto, c_desc, c_crit, c_emissao = carregar_dados()
-colunas_exibir = [col for col in [c_solic, c_desc, c_ccusto, c_crit, c_emissao, 'SLA'] if col is not None]
+df_full, c_pedido, c_solic, c_ccusto, c_desc, c_crit, c_emissao, c_status = carregar_dados()
+colunas_exibir = [col for col in [c_solic, c_status, c_desc, c_ccusto, c_crit, c_emissao, 'SLA'] if col is not None]
 
 # --- FILTROS ---
 st.sidebar.title("Filtros")
 anos_disp = sorted(df_full['ANO'].dropna().unique())
 ano_sel = st.sidebar.multiselect("Ano:", anos_disp, default=anos_disp)
 
-# Lista de meses corrigida para Português BR
 meses_todos = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro']
 mes_sel = st.sidebar.multiselect("Mês:", meses_todos, default=meses_todos)
 cc_sel = st.sidebar.multiselect("Centro de Custo:", sorted(df_full[c_ccusto].dropna().unique().tolist()))
@@ -142,10 +142,9 @@ with c_l:
         fig_p = go.Figure(data=[go.Pie(labels=status_counts.index, values=status_counts.values, marker=dict(colors=[CORES_STATUS.get(x, '#888') for x in status_counts.index]), textinfo='percent', textfont=dict(color='white', size=14), hole=0.4)])
         fig_p.update_layout(**dark_layout)
         
-        # Ativando clique no gráfico de Pizza
+        # --- NOVO: CAPTURA DO CLIQUE NO GRÁFICO DE PIZZA ---
         evento_pizza = st.plotly_chart(fig_p, use_container_width=True, on_select="rerun", config={'displayModeBar': False}, key=f"pizza_{st.session_state.pizza_key}")
         if evento_pizza and len(evento_pizza.selection.get("points", [])) > 0:
-            # Pega o rótulo da fatia clicada (ex: 'FINALIZADO', 'NO PRAZO')
             status_clicado = str(evento_pizza.selection["points"][0].get("label", "")).strip()
             df_detalhe = df_f[df_f['CATEGORIA_COR'].astype(str).str.strip() == status_clicado]
             st.session_state.df_modal = df_detalhe.drop_duplicates(subset=[c_solic])[colunas_exibir]
