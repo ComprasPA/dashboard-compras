@@ -174,9 +174,10 @@ with col_tabela1:
     df_abertas_global['SLA'] = pd.to_numeric(df_abertas_global['SLA'], errors='coerce').fillna(0)
     df_top10_abertas = df_abertas_global.sort_values(by='SLA', ascending=False).drop_duplicates(subset=[c_solic]).head(10)
     
-    # Gráfico para Top 10 Solicitações
-    fig_top_solic = px.bar(df_top10_abertas, x='SLA', y=c_solic, text_auto=True, orientation='h', color_discrete_sequence=['#e91e63'])
+    # Ajuste aqui: Forçado o parâmetro text='SLA' para exibir os dias de SLA nas barras
+    fig_top_solic = px.bar(df_top10_abertas, x='SLA', y=c_solic, text='SLA', orientation='h', color_discrete_sequence=['#e91e63'])
     fig_top_solic.update_layout(**dark_layout)
+    fig_top_solic.update_traces(textposition='inside', textfont_size=14)
     fig_top_solic.update_xaxes(visible=False)
     fig_top_solic.update_yaxes(autorange="reversed", title="")
     st.plotly_chart(fig_top_solic, use_container_width=True)
@@ -194,7 +195,6 @@ with col_tabela2:
     top_itens = df_itens[filtro_exclusao][c_desc].value_counts().reset_index().head(10)
     top_itens.columns = ['Item/Descrição', 'Vezes Solicitado']
     
-    # Gráfico para Top 10 Itens
     fig_top_itens = px.bar(top_itens, x='Vezes Solicitado', y='Item/Descrição', text_auto=True, orientation='h', color_discrete_sequence=['#00c853'])
     fig_top_itens.update_layout(**dark_layout)
     fig_top_itens.update_xaxes(visible=False)
@@ -217,7 +217,6 @@ with col_tabela3:
         top_cc['Total Geral'] = top_cc.sum(axis=1)
         top_cc = top_cc.sort_values(by='Total Geral', ascending=False).head(10).reset_index()
         
-        # Gráfico de Barras Empilhadas (Mapeia as criticidades dinamicamente)
         cols_crit = [col for col in top_cc.columns if col not in [c_ccusto, 'Total Geral']]
         fig_top_cc = px.bar(top_cc, y=c_ccusto, x=cols_crit, orientation='h', color_discrete_sequence=['#0f62fe', '#ffb300', '#e91e63'])
         fig_top_cc.update_layout(**dark_layout, barmode='stack')
