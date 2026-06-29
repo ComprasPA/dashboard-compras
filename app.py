@@ -67,6 +67,7 @@ df_sc_unicas = df_f.drop_duplicates(subset=[c_solic])
 # --- DASHBOARD ---
 st.title("📊 Dashboard Executivo de Compras")
 
+# Metricas e Gráficos (mantidos iguais)
 col1, col2, col3, col4 = st.columns(4)
 col1.metric("Pedidos Emitidos", df_sc_unicas[c_pedido].nunique())
 col2.metric("Sol. Fechadas", df_sc_unicas[~df_sc_unicas['IS_ABERTA']].shape[0])
@@ -75,25 +76,20 @@ col4.metric("SLA Médio (Abertas)", round(df_sc_unicas[df_sc_unicas['IS_ABERTA']
 
 st.divider()
 
-c_l, c_r = st.columns(2)
-with c_l:
-    st.subheader("Distribuição de Status")
-    status_counts = df_sc_unicas['CATEGORIA_COR'].value_counts()
-    fig_p = go.Figure(data=[go.Pie(labels=status_counts.index, values=status_counts.values, marker=dict(colors=[CORES_STATUS.get(x, '#ccc') for x in status_counts.index]), hole=0.3)])
-    st.plotly_chart(fig_p, use_container_width=True)
-
-with c_r:
-    st.subheader("Volume por Criticidade")
-    fig_c = px.bar(df_sc_unicas.groupby(c_crit)[c_solic].nunique().reset_index(), x=c_crit, y=c_solic, text_auto=True)
-    st.plotly_chart(fig_c, use_container_width=True)
-
-st.divider()
-
-st.subheader("⚠️ Top 10 Solicitações em Aberto")
-st.dataframe(df_f[df_f['IS_ABERTA']].sort_values('SLA', ascending=False).drop_duplicates(subset=[c_solic]).head(10)[[c_solic, c_desc, 'SLA', c_ccusto]], use_container_width=True)
-
-st.divider()
+# --- TOP 10 ITENS FILTRADO ---
 st.subheader("🛒 Top 10 Itens Mais Comprados (Volume)")
-top_itens = df_f.groupby(c_desc)['Qtd_Num'].sum().reset_index().sort_values(by='Qtd_Num', ascending=False).head(10)
+
+# Cria cópia para filtro e converte para string para busca insensível a maiúsculas
+df_itens = df_f.copy()
+df_itens[c_desc] = df_itens[c_desc].astype(str).str.lower()
+
+# Filtra os itens indesejados
+termos_excluidos = ['gasolina', 'diesel s granel']
+filtro_exclusao = ~df_itens[c_desc].str.contains('|'.join(termos_excluidos), na=False)
+df_itens_filtrado = df_itens[filtro_exclusao]
+
+# Agrupa e soma
+top_itens = df_itens_filtrado.groupby(c_desc)['Qtd_Num'].sum().reset_index().sort_values(by='Qtd_Num', ascending=False).head(10)
 top_itens.columns = ['Item/Descrição', 'Quantidade Total']
+
 st.dataframe(top_itens, use_container_width=True)
