@@ -129,11 +129,10 @@ with c_l:
     st.markdown("#### Distribuição de Status")
     status_counts = df_sc_unicas['CATEGORIA_COR'].value_counts()
     
-    # Criando colunas internas: Texto na esquerda (peso 1), Pizza na direita (peso 1.5)
     col_texto_pizza, col_grafico_pizza = st.columns([1, 1.5])
     
     with col_texto_pizza:
-        st.write("<br>", unsafe_allow_html=True) # Dá um pequeno empurrão para baixo para alinhar com o centro da pizza
+        st.write("<br>", unsafe_allow_html=True)
         if len(status_counts) > 0:
             for status, qtd in status_counts.items(): 
                 st.metric(status, qtd)
@@ -143,13 +142,13 @@ with c_l:
             labels=status_counts.index, 
             values=status_counts.values, 
             marker=dict(colors=[CORES_STATUS.get(x, '#888') for x in status_counts.index]), 
-            textinfo='label+value',
+            textinfo='percent+label', # Alterado aqui para percentual
             textfont=dict(color='white', size=14),
             hole=0.4
         )])
         
         fig_p.update_layout(**dark_layout)
-        fig_p.update_layout(showlegend=False) # Oculta a legenda padrão lateral para não duplicar com nossos textos
+        fig_p.update_layout(showlegend=False)
         st.plotly_chart(fig_p, use_container_width=True)
 
 with c_r:
