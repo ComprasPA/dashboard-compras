@@ -22,15 +22,14 @@ def carregar_dados():
     response.raise_for_status()
     df = pd.read_csv(io.StringIO(response.text))
     
-    # Limpeza de nomes de colunas
+    # Limpeza de nomes de colunas (remove espaços extras que causam KeyError)
     df.columns = df.columns.str.strip()
     
     df['STATUS_CLEAN'] = df['STATUS'].astype(str).str.strip().str.upper()
     df['SLA'] = pd.to_numeric(df['SLA'], errors='coerce').fillna(0)
-    df['DT EMISSAO'] = pd.to_datetime(df['Data Emissao'], errors='coerce')
-    df['IS_ABERTA'] = df['Pedido'].isna() | (df['Pedido'].astype(str) == 'nan')
+    df['DT EMISSAO'] = pd.to_datetime(df['DT Emissao'], errors='coerce')
+    df['IS_ABERTA'] = df['Nº Pedido (PC)'].isna() | (df['Nº Pedido (PC)'].astype(str) == 'nan')
     
-    # Lógica de Categorização
     df['CATEGORIA_COR'] = 'ATENÇÃO'
     df.loc[~df['IS_ABERTA'], 'CATEGORIA_COR'] = 'FINALIZADO'
     df.loc[df['IS_ABERTA'] & (df['SLA'] < 10), 'CATEGORIA_COR'] = 'NO PRAZO'
@@ -53,20 +52,20 @@ anos_disp = sorted(df_full['ANO'].dropna().unique())
 ano_sel = st.sidebar.multiselect("Ano:", anos_disp, default=anos_disp)
 mes_sel = st.sidebar.multiselect("Mês:", ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'], 
                                  default=['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'])
-cc_sel = st.sidebar.multiselect("Centro de Custo:", sorted(df_full['Centro de Custo'].dropna().unique().tolist()))
+cc_sel = st.sidebar.multiselect("Centro de Custo:", sorted(df_full['C Custo'].dropna().unique().tolist()))
 
 df_f = df_full.copy()
 if ano_sel: df_f = df_f[df_f['ANO'].isin(ano_sel)]
 if mes_sel: df_f = df_f[df_f['MES_NOME'].isin(mes_sel)]
-if cc_sel: df_f = df_f[df_f['Centro de Custo'].isin(cc_sel)]
+if cc_sel: df_f = df_f[df_f['C Custo'].isin(cc_sel)]
 
-df_sc_unicas = df_f.drop_duplicates(subset=['Solicitação'])
+df_sc_unicas = df_f.drop_duplicates(subset=['Nº Solicitação (SC)'])
 
 # --- DASHBOARD ---
 st.title("📊 Dashboard Executivo de Compras")
 
 col1, col2, col3, col4 = st.columns(4)
-col1.metric("Pedidos Emitidos", df_sc_unicas['Pedido'].nunique())
+col1.metric("Pedidos Emitidos", df_sc_unicas['Nº Pedido (PC)'].nunique())
 col2.metric("Sol. Fechadas", df_sc_unicas[~df_sc_unicas['IS_ABERTA']].shape[0])
 col3.metric("Sol. Abertas", df_sc_unicas[df_sc_unicas['IS_ABERTA']].shape[0])
 col4.metric("SLA Médio (Abertas)", round(df_sc_unicas[df_sc_unicas['IS_ABERTA']]['SLA'].mean(), 1))
@@ -81,37 +80,38 @@ with c_l:
                                    marker=dict(colors=[CORES_STATUS.get(x, '#ccc') for x in status_counts.index]),
                                    textinfo='percent+label', hole=0.3)])
     st.plotly_chart(fig_p, use_container_width=True)
-    
     cols_s = st.columns(len(status_counts))
     for i, (status, qtd) in enumerate(status_counts.items()): cols_s[i].metric(status, qtd)
 
 with c_r:
     st.subheader("Volume por Criticidade")
-    crit_counts = df_sc_unicas.groupby('Criticidade')['Solicitação'].nunique()
-    fig_c = px.bar(crit_counts.reset_index(), x='Criticidade', y='Solicitação', text_auto=True)
+    crit_counts = df_sc_unicas.groupby('Criticidade')['Nº Solicitação (SC)'].nunique()
+    fig_c = px.bar(crit_counts.reset_index(), x='Criticidade', y='Nº Solicitação (SC)', text_auto=True)
     st.plotly_chart(fig_c, use_container_width=True)
-    
     cols_c = st.columns(len(crit_counts))
     for i, (crit, qtd) in enumerate(crit_counts.items()): cols_c[i].metric(str(crit), qtd)
 
 st.divider()
 st.subheader("⚠️ Top 10 Solicitações em Aberto (Maior SLA Global)")
-df_top10 = df_full[df_full['IS_ABERTA']].sort_values('SLA', ascending=False).drop_duplicates(subset=['Solicitação']).head(10)
-st.dataframe(df_top10[['Solicitação', 'Descricao', 'SLA', 'Centro de Custo', 'Fornecedor']], use_container_width=True)
+df_top10 = df_full[df_full['IS_ABERTA']].sort_values('SLA', ascending=False).drop_duplicates(subset=['Nº Solicitação (SC)']).head(10)
+st.dataframe(df_top10[['Nº Solicitação (SC)', 'Descricao', 'SLA', 'C Custo', 'Comprador']], use_container_width=True)
 
-# --- RANKINGS AVANÇADOS ---
+# --- RANKINGS ---
 st.divider()
 col_rank1, col_rank2 = st.columns(2)
 
+# Defina aqui o nome exato conforme aparece na sua planilha (ex: 'Fornecedor')
+COL_FORN = 'Fornecedor' 
+
 with col_rank1:
-    st.subheader("🏆 Fornecedor Principal (Volume)")
-    # Considera apenas o que tem número de pedido, agrupa por fornecedor e conta únicos
-    df_ped = df_f[df_f['Pedido'].notna()].drop_duplicates(subset=['Pedido'])
-    if not df_ped.empty:
-        top_f = df_ped['Fornecedor'].value_counts().head(1)
-        st.metric(f"Fornecedor: {top_f.index[0]}", f"{top_f.values[0]} pedidos")
+    st.subheader("🏆 Top 10 Fornecedores")
+    if COL_FORN in df_f.columns:
+        df_ped = df_f[df_f['Nº Pedido (PC)'].notna()].drop_duplicates(subset=['Nº Pedido (PC)'])
+        top_f = df_ped[COL_FORN].value_counts().head(10).reset_index()
+        top_f.columns = ['Fornecedor', 'Qtd Pedidos']
+        st.dataframe(top_f, use_container_width=True)
     else:
-        st.info("Nenhum pedido fechado no período.")
+        st.warning(f"Coluna '{COL_FORN}' não encontrada. Verifique o nome na planilha.")
 
 with col_rank2:
     st.subheader("🛒 Top 10 Itens Mais Comprados")
