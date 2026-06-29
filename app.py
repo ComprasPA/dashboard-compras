@@ -7,12 +7,10 @@ import io
 
 st.set_page_config(page_title="Dashboard de Compras", layout="wide")
 
-# Configuração da planilha
 SHEET_ID = "1e7pQ512ge5XMnXxsRODEO7V48KgWo6FpKeITFqBSg1o"
 SHEET_NAME = "Solicitações"
 URL = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/gviz/tq?tqx=out:csv&sheet={SHEET_NAME}"
 
-# Mapeamento de cores
 CORES_STATUS = {
     'FINALIZADO': '#28a745', 'ATENÇÃO': '#ffc107',
     'FORA DO PRAZO': '#dc3545', 'NO PRAZO': '#007bff'
@@ -48,26 +46,24 @@ def carregar_dados():
 
 df_full = carregar_dados()
 
-# --- BARRA LATERAL (Filtros) ---
-st.sidebar.header("Configurações")
-ano_sel = st.sidebar.selectbox("Ano:", sorted(df_full['ANO'].dropna().unique()))
-mes_sel = st.sidebar.selectbox("Mês:", ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'])
+# --- BARRA LATERAL ---
+st.sidebar.header("Filtros Dinâmicos")
+ano_sel = st.sidebar.multiselect("Ano:", sorted(df_full['ANO'].dropna().unique()), default=sorted(df_full['ANO'].dropna().unique()))
+mes_sel = st.sidebar.multiselect("Mês:", ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'], default=['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'])
+cc_sel = st.sidebar.multiselect("Centro de Custo:", sorted(df_full['C Custo'].dropna().unique().tolist()))
+status_sel = st.sidebar.multiselect("Status:", list(CORES_STATUS.keys()))
 
-# Filtro de Centro de Custo e Status
-lista_cc = sorted(df_full['C Custo'].dropna().unique().tolist())
-cc_sel = st.sidebar.multiselect("Centro de Custo:", lista_cc, default=lista_cc)
-status_sel = st.sidebar.multiselect("Status:", list(CORES_STATUS.keys()), default=list(CORES_STATUS.keys()))
-
-# Aplicação dos filtros
-df_filtrado = df_full[(df_full['ANO'] == ano_sel) & 
-                      (df_full['MES_NOME'] == mes_sel) & 
-                      (df_full['C Custo'].isin(cc_sel)) & 
-                      (df_full['CATEGORIA_COR'].isin(status_sel))]
+# Aplicação dos Filtros (se vazio, mostra tudo)
+df_filtrado = df_full.copy()
+if ano_sel: df_filtrado = df_filtrado[df_filtrado['ANO'].isin(ano_sel)]
+if mes_sel: df_filtrado = df_filtrado[df_filtrado['MES_NOME'].isin(mes_sel)]
+if cc_sel: df_filtrado = df_filtrado[df_filtrado['C Custo'].isin(cc_sel)]
+if status_sel: df_filtrado = df_filtrado[df_filtrado['CATEGORIA_COR'].isin(status_sel)]
 
 df_unicos = df_filtrado.drop_duplicates(subset=['Nº Solicitação (SC)'])
 
 # --- DASHBOARD ---
-st.title(f"📊 Dashboard de Compras - {mes_sel}/{ano_sel}")
+st.title("📊 Dashboard Executivo de Compras")
 
 # Métricas
 col1, col2, col3, col4 = st.columns(4)
@@ -78,7 +74,7 @@ col4.metric("SLA Médio (Dias)", round(df_unicos['SLA'].mean(), 1))
 
 st.divider()
 
-# Gráfico
+# Visualização
 c_left, c_right = st.columns(2)
 with c_left:
     st.subheader("Distribuição de Status")
@@ -94,7 +90,6 @@ with c_right:
                       x='Criticidade', y='Nº Solicitação (SC)', text_auto=True)
     st.plotly_chart(fig_crit, use_container_width=True)
 
-# Tabela
 st.divider()
 st.subheader("Detalhamento das Solicitações")
 st.dataframe(df_unicos[['Nº Solicitação (SC)', 'Descricao', 'SLA', 'C Custo', 'Comprador', 'CATEGORIA_COR']], use_container_width=True)
