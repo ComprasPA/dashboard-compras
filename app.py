@@ -1,4 +1,4 @@
-import streamlit as st
+import streamlit st
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
@@ -9,7 +9,6 @@ import io
 st.set_page_config(page_title="Dashboard Executivo", layout="wide", initial_sidebar_state="expanded")
 
 # --- INICIALIZAÇÃO DE CHAVES DE CONTROLE DE SELEÇÃO ---
-if "pizza_key" not in st.session_state: st.session_state.pizza_key = 0
 if "solic_key" not in st.session_state: st.session_state.solic_key = 0
 if "item_key" not in st.session_state: st.session_state.item_key = 0
 if "cc_key" not in st.session_state: st.session_state.cc_key = 0
@@ -68,7 +67,6 @@ def carregar_dados():
     c_desc = find_col(['DESC'])
     c_solic = find_col(['SOLICITAÇÃO', 'SOLICITACAO'])
     c_crit = find_col(['CRITICIDADE'])
-    c_status = find_col(['STATUS', 'SITUAÇÃO', 'SITUACAO'])
 
     df['SLA'] = pd.to_numeric(df['SLA'], errors='coerce').fillna(0)
     df['DT_DT'] = pd.to_datetime(df[c_emissao], errors='coerce')
@@ -92,10 +90,10 @@ def carregar_dados():
     }
     df['MES_NOME'] = df['DT_DT'].dt.month_name().map(mapa_meses)
     
-    return df, c_pedido, c_solic, c_ccusto, c_desc, c_crit, c_emissao, c_status
+    return df, c_pedido, c_solic, c_ccusto, c_desc, c_crit, c_emissao
 
-df_full, c_pedido, c_solic, c_ccusto, c_desc, c_crit, c_emissao, c_status = carregar_dados()
-colunas_exibir = [col for col in [c_solic, c_status, c_desc, c_ccusto, c_crit, c_emissao, 'SLA'] if col is not None]
+df_full, c_pedido, c_solic, c_ccusto, c_desc, c_crit, c_emissao = carregar_dados()
+colunas_exibir = [col for col in [c_solic, c_desc, c_ccusto, c_crit, c_emissao, 'SLA'] if col is not None]
 
 # --- FILTROS ---
 st.sidebar.title("Filtros")
@@ -139,19 +137,16 @@ with c_l:
         if len(status_counts) > 0:
             for status, qtd in status_counts.items(): 
                 st.metric(status, qtd)
+                # Acionamento por botão robusto associado aos números da métrica
+                if st.button(f"🔍 Detalhes", key=f"btn_status_{status}", use_container_width=True):
+                    df_detalhe = df_f[df_f['CATEGORIA_COR'].astype(str).str.strip() == str(status).strip()]
+                    st.session_state.df_modal = df_detalhe.drop_duplicates(subset=[c_solic])[colunas_exibir]
+                    st.session_state.abrir_modal = True
+                    st.rerun()
     with col_pizza:
         fig_p = go.Figure(data=[go.Pie(labels=status_counts.index, values=status_counts.values, marker=dict(colors=[CORES_STATUS.get(x, '#888') for x in status_counts.index]), textinfo='percent', textfont=dict(color='white', size=14), hole=0.4)])
         fig_p.update_layout(**dark_layout)
-        
-        # --- CAPTURA O CLIQUE NA FATIA DO GRÁFICO DE PIZZA ---
-        evento_pizza = st.plotly_chart(fig_p, use_container_width=True, on_select="rerun", config={'displayModeBar': False}, key=f"pizza_{st.session_state.pizza_key}")
-        if evento_pizza and len(evento_pizza.selection.get("points", [])) > 0:
-            status_clicado = str(evento_pizza.selection["points"][0].get("label", "")).strip()
-            df_detalhe = df_f[df_f['CATEGORIA_COR'].astype(str).str.strip() == status_clicado]
-            st.session_state.df_modal = df_detalhe.drop_duplicates(subset=[c_solic])[colunas_exibir]
-            st.session_state.abrir_modal = True
-            st.session_state.pizza_key += 1
-            st.rerun()
+        st.plotly_chart(fig_p, use_container_width=True, config={'displayModeBar': False})
 
 with c_r:
     st.markdown("#### Volume por Criticidade")
