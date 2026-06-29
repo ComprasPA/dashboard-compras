@@ -11,29 +11,29 @@ st.set_page_config(page_title="Dashboard Executivo", layout="wide", initial_side
 # --- FUNÇÃO DO POP-UP (MODAL) ---
 @st.dialog("📋 Detalhes das Solicitações", width="large")
 def abrir_modal(df_filtrado):
-    st.write(f"**Total de solicitações únicas encontradas:** {len(df_filtrado)}")
-    st.dataframe(df_filtrado, use_container_width=True, hide_index=True)
+    st.write(f"**Total de solicitações únicas encontradas:** {len(df_filtrado)}")
+    st.dataframe(df_filtrado, use_container_width=True, hide_index=True)
 
-# --- CUSTOM CSS ---
+# --- CUSTOM CSS (ESTILO DARK E CARDS NEON) ---
 st.markdown("""
 <style>
-    .stApp { background-color: #13152a; }
-    .metric-card {
-        padding: 20px;
-        border-radius: 10px;
-        color: white;
-        box-shadow: 0 4px 8px rgba(0,0,0,0.4);
-        margin-bottom: 20px;
-        font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-    }
-    .card-blue { background: linear-gradient(135deg, #0f62fe 0%, #0033a0 100%); }
-    .card-green { background: linear-gradient(135deg, #00c853 0%, #009624 100%); }
-    .card-pink { background: linear-gradient(135deg, #e91e63 0%, #ad1457 100%); }
-    .card-purple { background: linear-gradient(135deg, #7c4dff 0%, #4527a0 100%); }
-    .metric-title { font-size: 16px; font-weight: 500; margin-bottom: 10px; opacity: 0.9; }
-    .metric-value { font-size: 36px; font-weight: bold; margin: 0; }
-    h1, h2, h3, h4, p, label { color: #ffffff !important; }
-    [data-testid="stSidebar"] { background-color: #1b1d36; }
+    .stApp { background-color: #13152a; }
+    .metric-card {
+        padding: 20px;
+        border-radius: 10px;
+        color: white;
+        box-shadow: 0 4px 8px rgba(0,0,0,0.4);
+        margin-bottom: 20px;
+        font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    }
+    .card-blue { background: linear-gradient(135deg, #0f62fe 0%, #0033a0 100%); }
+    .card-green { background: linear-gradient(135deg, #00c853 0%, #009624 100%); }
+    .card-pink { background: linear-gradient(135deg, #e91e63 0%, #ad1457 100%); }
+    .card-purple { background: linear-gradient(135deg, #7c4dff 0%, #4527a0 100%); }
+    .metric-title { font-size: 16px; font-weight: 500; margin-bottom: 10px; opacity: 0.9; }
+    .metric-value { font-size: 36px; font-weight: bold; margin: 0; }
+    h1, h2, h3, h4, p, label { color: #ffffff !important; }
+    [data-testid="stSidebar"] { background-color: #1b1d36; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -45,43 +45,41 @@ CORES_STATUS = {'FINALIZADO': '#00c853', 'ATENÇÃO': '#ffb300', 'FORA DO PRAZO'
 
 @st.cache_data(ttl=600)
 def carregar_dados():
-    response = requests.get(URL)
-    response.raise_for_status()
-    df = pd.read_csv(io.StringIO(response.text))
-    df.columns = df.columns.str.strip()
+    response = requests.get(URL)
+    response.raise_for_status()
+    df = pd.read_csv(io.StringIO(response.text))
+    df.columns = df.columns.str.strip()
 
-    def find_col(keywords):
-        for col in df.columns:
-            if any(k in col.upper() for k in keywords): return col
-        return None
+    def find_col(keywords):
+        for col in df.columns:
+            if any(k in col.upper() for k in keywords): return col
+        return None
 
-    c_pedido = find_col(['PEDIDO', 'Nº PEDIDO'])
-    c_emissao = find_col(['EMISSAO', 'EMISSÃO'])
-    c_qtd = find_col(['QTD', 'QUANTIDADE'])
-    c_ccusto = find_col(['CUSTO'])
-    c_desc = find_col(['DESC'])
-    c_solic = find_col(['SOLICITAÇÃO', 'SOLICITACAO'])
-    c_crit = find_col(['CRITICIDADE'])
-    c_status = find_col(['STATUS', 'SITUAÇÃO', 'SITUACAO']) # Novo localizador
+    c_pedido = find_col(['PEDIDO', 'Nº PEDIDO'])
+    c_emissao = find_col(['EMISSAO', 'EMISSÃO'])
+    c_qtd = find_col(['QTD', 'QUANTIDADE'])
+    c_ccusto = find_col(['CUSTO'])
+    c_desc = find_col(['DESC'])
+    c_solic = find_col(['SOLICITAÇÃO', 'SOLICITACAO'])
+    c_crit = find_col(['CRITICIDADE'])
 
-    df['SLA'] = pd.to_numeric(df['SLA'], errors='coerce').fillna(0)
-    df['DT_DT'] = pd.to_datetime(df[c_emissao], errors='coerce')
-    df['IS_ABERTA'] = df[c_pedido].isna() | (df[c_pedido].astype(str).str.lower() == 'nan')
-    df['Qtd_Num'] = pd.to_numeric(df[c_qtd], errors='coerce').fillna(0) if c_qtd else 0
+    df['SLA'] = pd.to_numeric(df['SLA'], errors='coerce').fillna(0)
+    df['DT_DT'] = pd.to_datetime(df[c_emissao], errors='coerce')
+    df['IS_ABERTA'] = df[c_pedido].isna() | (df[c_pedido].astype(str).str.lower() == 'nan')
+    df['Qtd_Num'] = pd.to_numeric(df[c_qtd], errors='coerce').fillna(0) if c_qtd else 0
 
-    df['CATEGORIA_COR'] = 'ATENÇÃO'
-    df.loc[~df['IS_ABERTA'], 'CATEGORIA_COR'] = 'FINALIZADO'
-    df.loc[df['IS_ABERTA'] & (df['SLA'] < 10), 'CATEGORIA_COR'] = 'NO PRAZO'
-    df.loc[df['IS_ABERTA'] & (df['SLA'] >= 10) & (df['SLA'] <= 15), 'CATEGORIA_COR'] = 'ATENÇÃO'
-    df.loc[df['IS_ABERTA'] & (df['SLA'] > 15), 'CATEGORIA_COR'] = 'FORA DO PRAZO'
+    df['CATEGORIA_COR'] = 'ATENÇÃO'
+    df.loc[~df['IS_ABERTA'], 'CATEGORIA_COR'] = 'FINALIZADO'
+    df.loc[df['IS_ABERTA'] & (df['SLA'] < 10), 'CATEGORIA_COR'] = 'NO PRAZO'
+    df.loc[df['IS_ABERTA'] & (df['SLA'] >= 10) & (df['SLA'] <= 15), 'CATEGORIA_COR'] = 'ATENÇÃO'
+    df.loc[df['IS_ABERTA'] & (df['SLA'] > 15), 'CATEGORIA_COR'] = 'FORA DO PRAZO'
 
-    df['ANO'] = df['DT_DT'].dt.year
-    df['MES_NOME'] = df['DT_DT'].dt.month_name()
-    return df, c_pedido, c_solic, c_ccusto, c_desc, c_crit, c_emissao, c_status
+    df['ANO'] = df['DT_DT'].dt.year
+    df['MES_NOME'] = df['DT_DT'].dt.month_name()
+    return df, c_pedido, c_solic, c_ccusto, c_desc, c_crit, c_emissao
 
-df_full, c_pedido, c_solic, c_ccusto, c_desc, c_crit, c_emissao, c_status = carregar_dados()
-# Adicionado c_status na lista de exibição
-colunas_exibir = [col for col in [c_solic, c_status, c_desc, c_ccusto, c_crit, c_emissao, 'SLA'] if col is not None]
+df_full, c_pedido, c_solic, c_ccusto, c_desc, c_crit, c_emissao = carregar_dados()
+colunas_exibir = [col for col in [c_solic, c_desc, c_ccusto, c_crit, c_emissao, 'SLA'] if col is not None]
 
 # --- FILTROS ---
 st.sidebar.title("Filtros")
@@ -116,27 +114,27 @@ c_l, c_r = st.columns(2)
 dark_layout = dict(paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', font=dict(color='#ffffff'), margin=dict(t=30, b=30, l=30, r=30))
 
 with c_l:
-    st.markdown("#### Distribuição de Status")
-    status_counts = df_sc_unicas['CATEGORIA_COR'].value_counts()
-    col_nums, col_pizza = st.columns([1, 2])
-    with col_nums:
-        st.write("<br>", unsafe_allow_html=True)
-        if len(status_counts) > 0:
-            for status, qtd in status_counts.items(): st.metric(status, qtd)
-    with col_pizza:
-        fig_p = go.Figure(data=[go.Pie(labels=status_counts.index, values=status_counts.values, marker=dict(colors=[CORES_STATUS.get(x, '#888') for x in status_counts.index]), textinfo='percent', textfont=dict(color='white', size=14), hole=0.4)])
-        fig_p.update_layout(**dark_layout)
-        st.plotly_chart(fig_p, use_container_width=True, config={'displayModeBar': False})
+    st.markdown("#### Distribuição de Status")
+    status_counts = df_sc_unicas['CATEGORIA_COR'].value_counts()
+    col_nums, col_pizza = st.columns([1, 2])
+    with col_nums:
+        st.write("<br>", unsafe_allow_html=True)
+        if len(status_counts) > 0:
+            for status, qtd in status_counts.items(): st.metric(status, qtd)
+    with col_pizza:
+        fig_p = go.Figure(data=[go.Pie(labels=status_counts.index, values=status_counts.values, marker=dict(colors=[CORES_STATUS.get(x, '#888') for x in status_counts.index]), textinfo='percent', textfont=dict(color='white', size=14), hole=0.4)])
+        fig_p.update_layout(**dark_layout)
+        st.plotly_chart(fig_p, use_container_width=True, config={'displayModeBar': False})
 
 with c_r:
-    st.markdown("#### Volume por Criticidade")
-    crit_counts = df_sc_unicas.groupby(c_crit)[c_solic].nunique().reset_index()
-    fig_c = px.bar(crit_counts, y=c_crit, x=c_solic, text_auto=True, orientation='h', color_discrete_sequence=['#0f62fe'])
-    fig_c.update_layout(**dark_layout)
-    fig_c.update_traces(textfont_size=21) 
-    fig_c.update_xaxes(visible=False) 
-    fig_c.update_yaxes(title="", tickfont=dict(size=16)) 
-    st.plotly_chart(fig_c, use_container_width=True, config={'displayModeBar': False})
+    st.markdown("#### Volume por Criticidade")
+    crit_counts = df_sc_unicas.groupby(c_crit)[c_solic].nunique().reset_index()
+    fig_c = px.bar(crit_counts, y=c_crit, x=c_solic, text_auto=True, orientation='h', color_discrete_sequence=['#0f62fe'])
+    fig_c.update_layout(**dark_layout)
+    fig_c.update_traces(textfont_size=21) 
+    fig_c.update_xaxes(visible=False) 
+    fig_c.update_yaxes(title="", tickfont=dict(size=16)) 
+    st.plotly_chart(fig_c, use_container_width=True, config={'displayModeBar': False})
 
 st.markdown("<hr style='border-color: #2b2b40;'>", unsafe_allow_html=True)
 
@@ -144,45 +142,45 @@ st.markdown("<hr style='border-color: #2b2b40;'>", unsafe_allow_html=True)
 col_graf1, col_graf2 = st.columns(2)
 
 with col_graf1:
-    st.markdown("#### ⚠️ Top 10 Solicitações em Aberto (Global)")
-    df_abertas_global = df_full[df_full['IS_ABERTA']].copy()
-    df_abertas_global['SLA'] = pd.to_numeric(df_abertas_global['SLA'], errors='coerce').fillna(0)
-    df_top10_abertas = df_abertas_global.sort_values(by='SLA', ascending=False).drop_duplicates(subset=[c_solic]).head(10)
-    df_top10_abertas['Solicitação_Str'] = df_top10_abertas[c_solic].astype(str)
-    
-    fig_top_solic = px.bar(df_top10_abertas, x='SLA', y='Solicitação_Str', text='SLA', orientation='h', hover_data=[c_desc], color_discrete_sequence=['#e91e63'])
-    fig_top_solic.update_traces(textposition='inside', textfont_size=18, hovertemplate="<b>Solicitação:</b> %{y}<br><b>SLA:</b> %{x} dias<br><b>Item:</b> %{customdata[0]}<extra></extra>")
-    fig_top_solic.update_layout(**dark_layout)
-    fig_top_solic.update_xaxes(visible=False)
-    fig_top_solic.update_yaxes(autorange="reversed", type='category', title="", tickfont=dict(size=14))
-    
-    evento_solic = st.plotly_chart(fig_top_solic, use_container_width=True, on_select="rerun", config={'displayModeBar': False})
-    if evento_solic and len(evento_solic.selection.get("points", [])) > 0:
-        id_clicado = str(evento_solic.selection["points"][0]["y"]).strip()
-        df_detalhe = df_full[df_full[c_solic].astype(str).str.strip() == id_clicado]
-        abrir_modal(df_detalhe.drop_duplicates(subset=[c_solic])[colunas_exibir])
+    st.markdown("#### ⚠️ Top 10 Solicitações em Aberto (Global)")
+    df_abertas_global = df_full[df_full['IS_ABERTA']].copy()
+    df_abertas_global['SLA'] = pd.to_numeric(df_abertas_global['SLA'], errors='coerce').fillna(0)
+    df_top10_abertas = df_abertas_global.sort_values(by='SLA', ascending=False).drop_duplicates(subset=[c_solic]).head(10)
+    df_top10_abertas['Solicitação_Str'] = df_top10_abertas[c_solic].astype(str)
+    
+    fig_top_solic = px.bar(df_top10_abertas, x='SLA', y='Solicitação_Str', text='SLA', orientation='h', hover_data=[c_desc], color_discrete_sequence=['#e91e63'])
+    fig_top_solic.update_traces(textposition='inside', textfont_size=18, hovertemplate="<b>Solicitação:</b> %{y}<br><b>SLA:</b> %{x} dias<br><b>Item:</b> %{customdata[0]}<extra></extra>")
+    fig_top_solic.update_layout(**dark_layout)
+    fig_top_solic.update_xaxes(visible=False)
+    fig_top_solic.update_yaxes(autorange="reversed", type='category', title="", tickfont=dict(size=14))
+    
+    evento_solic = st.plotly_chart(fig_top_solic, use_container_width=True, on_select="rerun", config={'displayModeBar': False})
+    if evento_solic and len(evento_solic.selection.get("points", [])) > 0:
+        id_clicado = str(evento_solic.selection["points"][0]["y"]).strip()
+        df_detalhe = df_full[df_full[c_solic].astype(str).str.strip() == id_clicado]
+        abrir_modal(df_detalhe.drop_duplicates(subset=[c_solic])[colunas_exibir])
 
 with col_graf2:
-    st.markdown("#### 🛒 Top 10 Itens Mais Comprados (Frequência)")
-    df_itens = df_f.copy()
-    desc_lower = df_itens[c_desc].astype(str).str.lower()
-    termos_excluidos = ['oleo comb diesel comum a granel', 'gasolina', 'serviço', 'servico', 'serv']
-    filtro_exclusao = ~desc_lower.str.contains('|'.join(termos_excluidos), na=False)
-    
-    top_itens = df_itens[filtro_exclusao][c_desc].value_counts().reset_index().head(10)
-    top_itens.columns = ['Item/Descrição', 'Vezes Solicitado']
-    
-    fig_top_itens = px.bar(top_itens, x='Vezes Solicitado', y='Item/Descrição', text_auto=True, orientation='h', color_discrete_sequence=['#00c853'])
-    fig_top_itens.update_layout(**dark_layout)
-    fig_top_itens.update_traces(textfont_size=18)
-    fig_top_itens.update_xaxes(visible=False)
-    fig_top_itens.update_yaxes(autorange="reversed", title="", tickfont=dict(size=14))
-    
-    evento_item = st.plotly_chart(fig_top_itens, use_container_width=True, on_select="rerun", config={'displayModeBar': False})
-    if evento_item and len(evento_item.selection.get("points", [])) > 0:
-        nome_item_clicado = str(evento_item.selection["points"][0]["y"]).strip()
-        df_detalhe = df_f[df_f[c_desc].astype(str).str.strip() == nome_item_clicado]
-        abrir_modal(df_detalhe.drop_duplicates(subset=[c_solic])[colunas_exibir])
+    st.markdown("#### 🛒 Top 10 Itens Mais Comprados (Frequência)")
+    df_itens = df_f.copy()
+    desc_lower = df_itens[c_desc].astype(str).str.lower()
+    termos_excluidos = ['oleo comb diesel comum a granel', 'gasolina', 'serviço', 'servico', 'serv']
+    filtro_exclusao = ~desc_lower.str.contains('|'.join(termos_excluidos), na=False)
+    
+    top_itens = df_itens[filtro_exclusao][c_desc].value_counts().reset_index().head(10)
+    top_itens.columns = ['Item/Descrição', 'Vezes Solicitado']
+    
+    fig_top_itens = px.bar(top_itens, x='Vezes Solicitado', y='Item/Descrição', text_auto=True, orientation='h', color_discrete_sequence=['#00c853'])
+    fig_top_itens.update_layout(**dark_layout)
+    fig_top_itens.update_traces(textfont_size=18)
+    fig_top_itens.update_xaxes(visible=False)
+    fig_top_itens.update_yaxes(autorange="reversed", title="", tickfont=dict(size=14))
+    
+    evento_item = st.plotly_chart(fig_top_itens, use_container_width=True, on_select="rerun", config={'displayModeBar': False})
+    if evento_item and len(evento_item.selection.get("points", [])) > 0:
+        nome_item_clicado = str(evento_item.selection["points"][0]["y"]).strip()
+        df_detalhe = df_f[df_f[c_desc].astype(str).str.strip() == nome_item_clicado]
+        abrir_modal(df_detalhe.drop_duplicates(subset=[c_solic])[colunas_exibir])
 
 st.markdown("<hr style='border-color: #2b2b40;'>", unsafe_allow_html=True)
 
@@ -190,37 +188,34 @@ st.markdown("<hr style='border-color: #2b2b40;'>", unsafe_allow_html=True)
 st.markdown("#### 🏢 Top 10 Centros de Custo (Sol. Abertas por Criticidade)")
 df_cc_abertas = df_f[df_f['IS_ABERTA']].copy()
 if not df_cc_abertas.empty:
-    df_unicas_cc = df_cc_abertas.drop_duplicates(subset=[c_solic])
-    totais_cc = df_unicas_cc.groupby(c_ccusto)[c_solic].nunique().reset_index(name='Total')
-    top_10_cc_nomes = totais_cc.sort_values(by='Total', ascending=False).head(10)[c_ccusto].tolist()
-    df_top10_cc = df_cc_abertas[df_cc_abertas[c_ccusto].isin(top_10_cc_nomes)]
-    df_plot_cc = df_top10_cc.groupby([c_ccusto, c_crit])[c_solic].nunique().reset_index(name='Quantidade')
-    df_totals = df_plot_cc.groupby(c_ccusto)['Quantidade'].sum().reset_index()
-    
-    mapa_cores_crit = {}
-    for crit in df_plot_cc[c_crit].unique():
-        crit_str = str(crit).lower().strip()
-        if 'direta' in crit_str: mapa_cores_crit[crit] = '#00c853'      
-        elif 'emerg' in crit_str: mapa_cores_crit[crit] = '#e91e63'   
-        elif 'rotin' in crit_str: mapa_cores_crit[crit] = '#0f62fe'      
-        else: mapa_cores_crit[crit] = '#ffb300'      
-    
-    fig_top_cc = px.bar(df_plot_cc, y=c_ccusto, x='Quantidade', color=c_crit, orientation='h', text_auto=True, custom_data=[c_crit], color_discrete_map=mapa_cores_crit)
-    
-    for _, row in df_totals.iterrows():
-        fig_top_cc.add_annotation(y=row[c_ccusto], x=row['Quantidade'], text=f" <b>Total: {row['Quantidade']}</b>", showarrow=False, xanchor='left', xshift=10, font=dict(color='#ffffff', size=14))
-    
-    fig_top_cc.update_layout(**dark_layout, barmode='stack', margin=dict(t=30, b=30, l=30, r=120))
-    fig_top_cc.update_traces(textfont_size=14, textposition="inside")
-    fig_top_cc.update_xaxes(visible=False, range=[0, df_totals['Quantidade'].max() * 1.4])
-    fig_top_cc.update_yaxes(type='category', categoryorder='array', categoryarray=top_10_cc_nomes[::-1], title="", tickfont=dict(size=14))
-    
-    evento_cc = st.plotly_chart(fig_top_cc, use_container_width=True, on_select="rerun", config={'displayModeBar': False})
-    if evento_cc and len(evento_cc.selection.get("points", [])) > 0:
-        ponto_selecionado = evento_cc.selection["points"][0]
-        cc_clicado = str(ponto_selecionado["y"]).strip()
-        crit_clicada = str(ponto_selecionado["customdata"][0]).strip()
-        df_detalhe = df_f[(df_f[c_ccusto].astype(str).str.strip() == cc_clicado) & (df_f[c_crit].astype(str).str.strip() == crit_clicada) & (df_f['IS_ABERTA'])]
-        abrir_modal(df_detalhe.drop_duplicates(subset=[c_solic])[colunas_exibir])
+    df_unicas_cc = df_cc_abertas.drop_duplicates(subset=[c_solic])
+    totais_cc = df_unicas_cc.groupby(c_ccusto)[c_solic].nunique().reset_index(name='Total')
+    top_10_cc_nomes = totais_cc.sort_values(by='Total', ascending=False).head(10)[c_ccusto].tolist()
+    df_top10_cc = df_cc_abertas[df_cc_abertas[c_ccusto].isin(top_10_cc_nomes)]
+    df_plot_cc = df_top10_cc.groupby([c_ccusto, c_crit])[c_solic].nunique().reset_index(name='Quantidade')
+    
+    mapa_cores_crit = {}
+    for crit in df_plot_cc[c_crit].unique():
+        crit_str = str(crit).lower().strip()
+        if 'direta' in crit_str: mapa_cores_crit[crit] = '#00c853'      
+        elif 'emerg' in crit_str: mapa_cores_crit[crit] = '#e91e63'   
+        elif 'rotin' in crit_str: mapa_cores_crit[crit] = '#0f62fe'      
+        else: mapa_cores_crit[crit] = '#ffb300'      
+    
+    fig_top_cc = px.bar(df_plot_cc, y=c_ccusto, x='Quantidade', color=c_crit, orientation='h', text_auto=True, custom_data=[c_crit], color_discrete_map=mapa_cores_crit)
+    fig_top_cc.update_layout(**dark_layout, barmode='stack')
+    fig_top_cc.update_traces(textfont_size=18, textposition="inside")
+    fig_top_cc.update_xaxes(visible=False)
+    fig_top_cc.update_yaxes(type='category', categoryorder='array', categoryarray=top_10_cc_nomes[::-1], title="", tickfont=dict(size=14))
+    
+    evento_cc = st.plotly_chart(fig_top_cc, use_container_width=True, on_select="rerun", config={'displayModeBar': False})
+    if evento_cc and len(evento_cc.selection.get("points", [])) > 0:
+        ponto_selecionado = evento_cc.selection["points"][0]
+        cc_clicado = str(ponto_selecionado["y"]).strip()
+        crit_clicada = str(ponto_selecionado["customdata"][0]).strip()
+        df_detalhe = df_f[(df_f[c_ccusto].astype(str).str.strip() == cc_clicado) & (df_f[c_crit].astype(str).str.strip() == crit_clicada) & (df_f['IS_ABERTA'])]
+        abrir_modal(df_detalhe.drop_duplicates(subset=[c_solic])[colunas_exibir])
 else:
-    st.write("Sem registros abertos.")
+    st.write("Sem registros abertos.")
+
+
