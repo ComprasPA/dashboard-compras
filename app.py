@@ -25,17 +25,17 @@ def carregar_dados():
     response.raise_for_status()
     df = pd.read_csv(io.StringIO(response.text))
     
-    # Tratamentos de colunas
+    # Tratamentos
     df['STATUS_CLEAN'] = df['STATUS'].astype(str).str.strip().str.upper()
-    
-    # Forçar conversão de SLA para numérico e tratar erros
     df['SLA'] = pd.to_numeric(df['SLA'], errors='coerce').fillna(0)
     df['DT EMISSAO'] = pd.to_datetime(df['DT Emissao'], errors='coerce')
     
+    # Lógica: ABERTA = SEM NÚMERO DE PEDIDO (PC)
+    df['IS_ABERTA'] = df['Nº Pedido (PC)'].isna()
+    
     def categorizar(row):
-        status = row['STATUS_CLEAN']
+        if not row['IS_ABERTA']: return 'FINALIZADO'
         sla = row['SLA']
-        if status == 'FINALIZADO': return 'FINALIZADO'
         if sla == 0: return 'ATENÇÃO'
         if sla < 10: return 'NO PRAZO'
         if sla <= 15: return 'ATENÇÃO'
@@ -73,12 +73,12 @@ df_unicos = df_filtrado.drop_duplicates(subset=['Nº Solicitação (SC)'])
 # --- DASHBOARD ---
 st.title("📊 Dashboard Executivo de Compras")
 
-# Métricas
+# Métricas (Agora calculadas com a nova regra de "Aberta = Sem Pedido")
 col1, col2, col3, col4 = st.columns(4)
-col1.metric("Pedidos Emitidos", df_unicos[df_unicos['Nº Pedido (PC)'].notna()]['Nº Pedido (PC)'].nunique())
-col2.metric("Sol. Fechadas", df_unicos[df_unicos['STATUS_CLEAN'] == 'FINALIZADO'].shape[0])
-col3.metric("Sol. Abertas", df_unicos[~df_unicos['STATUS_CLEAN'].str.contains('FINALIZADO', na=False)].shape[0])
-col4.metric("SLA Médio (Dias)", round(df_unicos['SLA'].mean(), 1))
+col1.metric("Pedidos Emitidos", df_filtrado['Nº Pedido (PC)'].nunique())
+col2.metric("Sol. Fechadas", df_filtrado[~df_filtrado['IS_ABERTA']].shape[0])
+col3.metric("Sol. Abertas", df_filtrado[df_filtrado['IS_ABERTA']].shape[0])
+col4.metric("SLA Médio (Dias)", round(df_filtrado['SLA'].mean(), 1))
 
 st.divider()
 
@@ -86,7 +86,7 @@ st.divider()
 c_left, c_right = st.columns(2)
 with c_left:
     st.subheader("Distribuição de Status")
-    status_counts = df_unicos['CATEGORIA_COR'].value_counts()
+    status_counts = df_filtrado['CATEGORIA_COR'].value_counts()
     fig_pizza = go.Figure(data=[go.Pie(labels=status_counts.index, values=status_counts.values, 
                                        marker=dict(colors=[CORES_STATUS.get(x, '#ccc') for x in status_counts.index]),
                                        textinfo='percent+label', hole=0.3)])
@@ -94,22 +94,14 @@ with c_left:
 
 with c_right:
     st.subheader("Volume por Criticidade")
-    fig_crit = px.bar(df_unicos.groupby('Criticidade')['Nº Solicitação (SC)'].nunique().reset_index(), 
+    fig_crit = px.bar(df_filtrado.groupby('Criticidade')['Nº Solicitação (SC)'].nunique().reset_index(), 
                       x='Criticidade', y='Nº Solicitação (SC)', text_auto=True)
     st.plotly_chart(fig_crit, use_container_width=True)
 
-# Top 10 SLA (Tabela Forçada)
+# Top 10 ABERTAS (Apenas as que não tem pedido de compra)
 st.divider()
 st.subheader("⚠️ Top 10 Solicitações em Aberto (Maiores SLAs)")
-
-# Agrupamento para evitar duplicidade de SCs e garantir que o SLA máximo seja capturado
-df_top10 = df_unicos.groupby(['Nº Solicitação (SC)', 'Descricao', 'C Custo', 'Comprador'])['SLA'].max().reset_index()
-
-# Ordenação pelo SLA
+df_top10 = df_filtrado[df_filtrado['IS_ABERTA']].groupby(['Nº Solicitação (SC)', 'Descricao', 'C Custo', 'Comprador'])['SLA'].max().reset_index()
 df_top10 = df_top10.sort_values(by='SLA', ascending=False).head(10)
 
-# Exibição
 st.dataframe(df_top10, use_container_width=True)
-
-if df_top10.empty:
-    st.warning("Nenhum dado encontrado para exibir. Verifique os filtros na barra lateral.")
