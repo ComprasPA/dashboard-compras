@@ -174,12 +174,17 @@ with col_tabela1:
     df_abertas_global['SLA'] = pd.to_numeric(df_abertas_global['SLA'], errors='coerce').fillna(0)
     df_top10_abertas = df_abertas_global.sort_values(by='SLA', ascending=False).drop_duplicates(subset=[c_solic]).head(10)
     
-    # Ajuste aqui: Forçado o parâmetro text='SLA' para exibir os dias de SLA nas barras
-    fig_top_solic = px.bar(df_top10_abertas, x='SLA', y=c_solic, text='SLA', orientation='h', color_discrete_sequence=['#e91e63'])
+    # CORREÇÃO CRÍTICA AQUI: Forçar a coluna de solicitação a ser interpretada como STRING (Texto)
+    # Isso impede que o Plotly tente criar um eixo Y matemático/numérico
+    df_top10_abertas['Solicitação_Str'] = df_top10_abertas[c_solic].astype(str)
+    
+    # Eixo X é o SLA. Eixo Y é a Solicitação em formato texto.
+    fig_top_solic = px.bar(df_top10_abertas, x='SLA', y='Solicitação_Str', text='SLA', orientation='h', color_discrete_sequence=['#e91e63'])
     fig_top_solic.update_layout(**dark_layout)
     fig_top_solic.update_traces(textposition='inside', textfont_size=14)
     fig_top_solic.update_xaxes(visible=False)
-    fig_top_solic.update_yaxes(autorange="reversed", title="")
+    # Força o tipo do eixo para 'category' para garantir a ordem exata do Top 10
+    fig_top_solic.update_yaxes(autorange="reversed", type='category', title="")
     st.plotly_chart(fig_top_solic, use_container_width=True)
     
     st.dataframe(df_top10_abertas[[c_solic, c_desc, 'SLA', c_ccusto]], use_container_width=True)
@@ -221,7 +226,7 @@ with col_tabela3:
         fig_top_cc = px.bar(top_cc, y=c_ccusto, x=cols_crit, orientation='h', color_discrete_sequence=['#0f62fe', '#ffb300', '#e91e63'])
         fig_top_cc.update_layout(**dark_layout, barmode='stack')
         fig_top_cc.update_xaxes(visible=False)
-        fig_top_cc.update_yaxes(autorange="reversed", title="")
+        fig_top_cc.update_yaxes(autorange="reversed", type='category', title="")
         st.plotly_chart(fig_top_cc, use_container_width=True)
         
         st.dataframe(top_cc, use_container_width=True)
