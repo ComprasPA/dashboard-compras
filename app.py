@@ -61,13 +61,14 @@ def carregar_dados():
             if any(k in col.upper() for k in keywords): return col
         return None
 
+    # AJUSTE CRÍTICO: Inclusão dos termos truncados da planilha para evitar valores nulos (None)
     c_pedido = find_col(['PEDIDO', 'Nº PEDIDO'])
-    c_emissao = find_col(['EMISSAO', 'EMISSÃO'])
-    c_qtd = find_col(['QTD', 'QUANTIDADE'])
-    c_ccusto = find_col(['CUSTO'])
-    c_desc = find_col(['DESC'])
-    c_solic = find_col(['SOLICITAÇÃO', 'SOLICITACAO'])
-    c_crit = find_col(['CRITICIDADE'])
+    c_emissao = find_col(['EMISSAO', 'EMISSÃO', 'DT EMISSA'])
+    c_qtd = find_col(['QTD', 'QUANTIDADE', 'QUANTIDAD'])
+    c_ccusto = find_col(['CUSTO', 'C CUSTO'])
+    c_desc = find_col(['DESC', 'DESCRICAO'])
+    c_solic = find_col(['SOLICITAÇÃO', 'SOLICITACAO', 'Nº SOLICITA'])
+    c_crit = find_col(['CRITICIDADE', 'CRITICIDAD'])
     c_status = find_col(['STATUS', 'SITUAÇÃO', 'SITUACAO'])
 
     df['SLA'] = pd.to_numeric(df['SLA'], errors='coerce').fillna(0)
@@ -139,15 +140,18 @@ with c_l:
         if len(status_counts) > 0:
             for status, qtd in status_counts.items(): 
                 st.metric(status, qtd)
-                if st.button(f"🔍 Detalhes", key=f"btn_{status}"):
-                    df_detalhe = df_f[df_f['CATEGORIA_COR'] == status]
-                    st.session_state.df_modal = df_detalhe.drop_duplicates(subset=[c_solic])[colunas_exibir]
-                    st.session_state.abrir_modal = True
-                    st.rerun()
     with col_pizza:
         fig_p = go.Figure(data=[go.Pie(labels=status_counts.index, values=status_counts.values, marker=dict(colors=[CORES_STATUS.get(x, '#888') for x in status_counts.index]), textinfo='percent', textfont=dict(color='white', size=14), hole=0.4)])
         fig_p.update_layout(**dark_layout)
-        st.plotly_chart(fig_p, use_container_width=True, config={'displayModeBar': False})
+        
+        evento_pizza = st.plotly_chart(fig_p, use_container_width=True, on_select="rerun", config={'displayModeBar': False}, key=f"pizza_{st.session_state.pizza_key}")
+        if evento_pizza and len(evento_pizza.selection.get("points", [])) > 0:
+            status_clicado = str(evento_pizza.selection["points"][0].get("label", "")).strip()
+            df_detalhe = df_f[df_f['CATEGORIA_COR'].astype(str).str.strip() == status_clicado]
+            st.session_state.df_modal = df_detalhe.drop_duplicates(subset=[c_solic])[colunas_exibir]
+            st.session_state.abrir_modal = True
+            st.session_state.pizza_key += 1
+            st.rerun()
 
 with c_r:
     st.markdown("#### Volume por Criticidade")
