@@ -45,51 +45,53 @@ st.markdown("""
 
 SHEET_ID = "1e7pQ512ge5XMnXxsRODEO7V48KgWo6FpKeITFqBSg1o"
 SHEET_NAME = "Solicitações"
-URL = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/gviz/tq?tqx=out:csv&sheet={SHEET_NAME}"
+import urllib.parse
+URL = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/gviz/tq?tqx=out:csv&sheet={urllib.parse.quote(SHEET_NAME)}"
 
 CORES_STATUS = {'FINALIZADO': '#00c853', 'ATENÇÃO': '#ffb300', 'FORA DO PRAZO': '#e91e63', 'NO PRAZO': '#0f62fe'}
 
 @st.cache_data(ttl=600)
 def carregar_dados():
     response = requests.get(URL)
-    response.raise_for_status()
     df = pd.read_csv(io.StringIO(response.text))
     df.columns = df.columns.str.strip()
 
-    # --- LÓGICA BLINDADA: Busca por texto, se falhar, usa a posição exata da imagem ---
-    def get_col(keywords, fallback_idx):
-        for col in df.columns:
-            if col.strip().upper() in keywords: return col
-        for col in df.columns:
-            for kw in keywords:
-                if kw in col.strip().upper(): return col
-        # Fallback pelo índice exato da sua imagem
-        if fallback_idx < len(df.columns): return df.columns[fallback_idx]
-        return df.columns[0]
+    # --- LÓGICA DE BUSCA BLINDADA (Ignora Acentos e Cortes) ---
+    def find_col(keywords):
+        cols_limpas = [str(c).upper().replace('Ã','A').replace('Ç','C').replace('Õ','O').replace('É','E').replace('Í','I') for c in df.columns]
+        for kw in keywords:
+            kw_clean = kw.upper().replace('Ã','A').replace('Ç','C').replace('Õ','O')
+            for orig_col, clean_col in zip(df.columns, cols_limpas):
+                if kw_clean in clean_col:
+                    return orig_col
+        return df.columns[0] # Retorno seguro
 
-    c_status = get_col(['STATUS'], 0)
-    c_solic = get_col(['Nº SOLICITA', 'SOLICITACAO', 'SOLICITAÇÃO'], 3)
-    c_pedido = get_col(['Nº PEDIDO', 'PEDIDO'], 5)
-    c_desc = get_col(['DESCRICAO', 'DESCRI'], 7)
-    c_qtd = get_col(['QUANTIDADE', 'QUANTIDAC', 'QTD'], 9)
-    c_ccusto = get_col(['C CUSTO', 'CUSTO'], 10)
-    c_emissao = get_col(['DT EMISSA', 'EMISSAO', 'EMISSÃO'], 14)
-    c_crit = get_col(['CRITICIDAD', 'CRITICIDADE'], 38)
+    c_pedido = find_col(['PEDIDO'])
+    c_emissao = find_col(['EMISSAO', 'EMISSA'])
+    c_qtd = find_col(['QUANTIDADE', 'QTD', 'QUANTIDA'])
+    c_ccusto = find_col(['CUSTO'])
+    c_desc = find_col(['DESCRICAO', 'DESC'])
+    c_solic = find_col(['SOLICITACAO', 'SOLICITA'])
+    c_crit = find_col(['CRITICIDADE', 'CRITICIDAD'])
+    c_status = find_col(['STATUS', 'SITUACAO'])
 
+    # --- LIMPEZA DOS DADOS ---
     df['SLA'] = pd.to_numeric(df['SLA'], errors='coerce').fillna(0)
     df['DT_DT'] = pd.to_datetime(df[c_emissao], errors='coerce', dayfirst=True)
     
-    # Tratamento seguro contra pedidos nulos ou com traços/espaços
+    # Tratamento imbatível para descobrir se está Aberta ou Fechada
     pedidos_str = df[c_pedido].astype(str).str.strip().str.upper()
     df['IS_ABERTA'] = pedidos_str.isin(['NAN', 'NONE', 'NULL', '', '0', '-', '<NA>'])
     
+    # Definição das Categorias
     df['CATEGORIA_COR'] = 'ATENÇÃO'
     df.loc[~df['IS_ABERTA'], 'CATEGORIA_COR'] = 'FINALIZADO'
     df.loc[df['IS_ABERTA'] & (df['SLA'] < 10), 'CATEGORIA_COR'] = 'NO PRAZO'
     df.loc[df['IS_ABERTA'] & (df['SLA'] >= 10) & (df['SLA'] <= 15), 'CATEGORIA_COR'] = 'ATENÇÃO'
     df.loc[df['IS_ABERTA'] & (df['SLA'] > 15), 'CATEGORIA_COR'] = 'FORA DO PRAZO'
 
-    df['ANO_FILTRO'] = df['DT_DT'].dt.year.fillna(0).astype(int)
+    # Preenchimento de Data de Segurança para não esvaziar os filtros
+    df['ANO_FILTRO'] = df['DT_DT'].dt.year.fillna(2026).astype(int)
     mapa_meses = {
         'January': 'Janeiro', 'February': 'Fevereiro', 'March': 'Março',
         'April': 'Abril', 'May': 'Maio', 'June': 'Junho',
@@ -101,29 +103,29 @@ def carregar_dados():
     return df, c_pedido, c_solic, c_ccusto, c_desc, c_crit, c_emissao, c_status
 
 df_full, c_pedido, c_solic, c_ccusto, c_desc, c_crit, c_emissao, c_status = carregar_dados()
-colunas_exibir = [col for col in [c_solic, c_status, c_desc, c_ccusto, c_crit, c_emissao, 'SLA'] if col in df_full.columns]
+colunas_exibir = [col for col in [c_solic, c_status, c_desc, c_ccusto, c_crit, c_emissao, 'SLA'] if col is not None]
 
-# --- FILTROS DINÂMICOS ---
+# --- FILTROS DINÂMICOS (Vêm pré-selecionados) ---
 st.sidebar.title("Filtros")
-anos_disp = sorted([a for a in df_full['ANO_FILTRO'].unique() if a != 0])
-if not anos_disp: anos_disp = [0]
+
+anos_disp = sorted(df_full['ANO_FILTRO'].unique().tolist())
 ano_sel = st.sidebar.multiselect("Ano:", anos_disp, default=anos_disp)
 
-meses_disp = [m for m in df_full['MES_FILTRO'].unique() if pd.notna(m)]
+meses_disp = df_full['MES_FILTRO'].unique().tolist()
 mes_sel = st.sidebar.multiselect("Mês:", meses_disp, default=meses_disp)
 
-cc_disp = sorted(df_full[c_ccusto].dropna().astype(str).unique().tolist())
-cc_sel = st.sidebar.multiselect("Centro de Custo:", cc_disp)
+cc_disp = sorted(df_full[c_ccusto].astype(str).unique().tolist())
+cc_sel = st.sidebar.multiselect("Centro de Custo:", cc_disp, default=cc_disp)
 
+# Aplicação dos Filtros de forma segura
 df_f = df_full.copy()
 if ano_sel: df_f = df_f[df_f['ANO_FILTRO'].isin(ano_sel)]
 if mes_sel: df_f = df_f[df_f['MES_FILTRO'].isin(mes_sel)]
-if cc_sel: df_f = df_f[df_f[c_ccusto].astype(str).isin(cc_sel)]
+if cc_sel:  df_f = df_f[df_f[c_ccusto].astype(str).isin(cc_sel)]
 
-# Mantendo as solicitações únicas para não inflar as métricas
 df_sc_unicas = df_f.drop_duplicates(subset=[c_solic])
 
-# --- DASHBOARD ---
+# --- DASHBOARD DE METRICAS ---
 st.markdown("<h3>Análise Executiva de Compras</h3>", unsafe_allow_html=True)
 
 pedidos_unicos = df_sc_unicas[c_pedido].astype(str).str.strip().str.upper()
@@ -138,7 +140,7 @@ col2.markdown(f'<div class="metric-card card-green"><div class="metric-title">So
 col3.markdown(f'<div class="metric-card card-pink"><div class="metric-title">Sol. Abertas</div><div class="metric-value">{v_abertas}</div></div>', unsafe_allow_html=True)
 col4.markdown(f'<div class="metric-card card-purple"><div class="metric-title">SLA Médio (Abertas)</div><div class="metric-value">{v_sla} dias</div></div>', unsafe_allow_html=True)
 
-# --- GRÁFICOS ---
+# --- GRÁFICOS CENTRAIS ---
 c_l, c_r = st.columns(2)
 dark_layout = dict(paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', font=dict(color='#ffffff'), margin=dict(t=30, b=30, l=30, r=30))
 
@@ -146,16 +148,18 @@ with c_l:
     st.markdown("#### Distribuição de Status")
     status_counts = df_sc_unicas['CATEGORIA_COR'].value_counts()
     col_nums, col_pizza = st.columns([1, 2])
+    
     with col_nums:
         st.write("<br>", unsafe_allow_html=True)
         if len(status_counts) > 0:
             for status, qtd in status_counts.items(): 
                 st.metric(status, qtd)
-                if st.button(f"🔍 Detalhes", key=f"btn_{status}"):
+                if st.button(f"🔍 Detalhes", key=f"btn_status_{status}"):
                     df_detalhe = df_f[df_f['CATEGORIA_COR'] == status]
                     st.session_state.df_modal = df_detalhe.drop_duplicates(subset=[c_solic])[colunas_exibir]
                     st.session_state.abrir_modal = True
                     st.rerun()
+                    
     with col_pizza:
         if len(status_counts) > 0:
             fig_p = go.Figure(data=[go.Pie(labels=status_counts.index, values=status_counts.values, marker=dict(colors=[CORES_STATUS.get(x, '#888') for x in status_counts.index]), textinfo='percent', textfont=dict(color='white', size=14), hole=0.4)])
@@ -175,7 +179,7 @@ with c_r:
 
 st.markdown("<hr style='border-color: #2b2b40;'>", unsafe_allow_html=True)
 
-# --- QUADRANTE SUPERIOR ---
+# --- QUADRANTE INFERIOR: TOP 10 ---
 col_graf1, col_graf2 = st.columns(2)
 
 with col_graf1:
@@ -229,7 +233,7 @@ with col_graf2:
 
 st.markdown("<hr style='border-color: #2b2b40;'>", unsafe_allow_html=True)
 
-# --- GRÁFICO INFERIOR ---
+# --- GRÁFICO INFERIOR: CENTROS DE CUSTO ---
 st.markdown("#### 🏢 Top 10 Centros de Custo (Sol. Abertas por Criticidade)")
 df_cc_abertas = df_f[df_f['IS_ABERTA']].copy()
 if not df_cc_abertas.empty:
@@ -253,7 +257,6 @@ if not df_cc_abertas.empty:
     ordem_desejada.extend([c for c in todas_crits if 'corre' in str(c).lower() or 'process' in str(c).lower()])
     ordem_desejada.extend([c for c in todas_crits if 'emerg' in str(c).lower()])
     ordem_desejada.extend([c for c in todas_crits if 'rotin' in str(c).lower()])
-    
     for c in todas_crits:
         if c not in ordem_desejada: ordem_desejada.append(c)
     
@@ -273,10 +276,8 @@ if not df_cc_abertas.empty:
         st.session_state.abrir_modal = True
         st.session_state.cc_key += 1
         st.rerun()
-else:
-    st.write("Sem registros abertos para exibir nos Centros de Custo.")
 
-# --- GERENCIADOR DE MODAL CENTRALIZADO (DESMARCAÇÃO AUTOMÁTICA) ---
+# --- GERENCIADOR DE MODAL CENTRALIZADO ---
 if st.session_state.get("abrir_modal", False):
     abrir_modal(st.session_state.df_modal)
     st.session_state.abrir_modal = False
