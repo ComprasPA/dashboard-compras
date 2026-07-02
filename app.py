@@ -4,6 +4,7 @@ import plotly.express as px
 import plotly.graph_objects as go
 import requests
 import io
+import urllib.parse
 
 # Configuração da Página
 st.set_page_config(page_title="Dashboard Executivo", layout="wide", initial_sidebar_state="expanded")
@@ -45,7 +46,6 @@ st.markdown("""
 
 SHEET_ID = "1e7pQ512ge5XMnXxsRODEO7V48KgWo6FpKeITFqBSg1o"
 SHEET_NAME = "Solicitações"
-import urllib.parse
 URL = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/gviz/tq?tqx=out:csv&sheet={urllib.parse.quote(SHEET_NAME)}"
 
 CORES_STATUS = {'FINALIZADO': '#00c853', 'ATENÇÃO': '#ffb300', 'FORA DO PRAZO': '#e91e63', 'NO PRAZO': '#0f62fe'}
@@ -54,7 +54,10 @@ CORES_STATUS = {'FINALIZADO': '#00c853', 'ATENÇÃO': '#ffb300', 'FORA DO PRAZO'
 def carregar_dados():
     response = requests.get(URL)
     df = pd.read_csv(io.StringIO(response.text))
-    df.columns = df.columns.str.strip()
+    
+    # Tratamento contra colunas corrompidas ou duplicadas
+    df.columns = df.columns.astype(str).str.strip()
+    df = df.loc[:, ~df.columns.duplicated()] 
 
     # --- LÓGICA DE BUSCA BLINDADA (Ignora Acentos e Cortes) ---
     def find_col(keywords):
@@ -90,7 +93,7 @@ def carregar_dados():
     df.loc[df['IS_ABERTA'] & (df['SLA'] >= 10) & (df['SLA'] <= 15), 'CATEGORIA_COR'] = 'ATENÇÃO'
     df.loc[df['IS_ABERTA'] & (df['SLA'] > 15), 'CATEGORIA_COR'] = 'FORA DO PRAZO'
 
-    # Preenchimento de Data de Segurança para não esvaziar os filtros
+    # Preenchimento de Data de Segurança
     df['ANO_FILTRO'] = df['DT_DT'].dt.year.fillna(2026).astype(int)
     mapa_meses = {
         'January': 'Janeiro', 'February': 'Fevereiro', 'March': 'Março',
@@ -105,23 +108,24 @@ def carregar_dados():
 df_full, c_pedido, c_solic, c_ccusto, c_desc, c_crit, c_emissao, c_status = carregar_dados()
 colunas_exibir = [col for col in [c_solic, c_status, c_desc, c_ccusto, c_crit, c_emissao, 'SLA'] if col is not None]
 
-# --- FILTROS DINÂMICOS (Vêm pré-selecionados) ---
+# --- FILTROS DINÂMICOS COM EXTRAÇÃO SEGURA CONTRA ERROS DE TIPO ---
 st.sidebar.title("Filtros")
 
-anos_disp = sorted(df_full['ANO_FILTRO'].unique().tolist())
+anos_disp = sorted(list(set(int(x) for x in df_full['ANO_FILTRO'] if pd.notna(x) and x != 0)))
 ano_sel = st.sidebar.multiselect("Ano:", anos_disp, default=anos_disp)
 
-meses_disp = df_full['MES_FILTRO'].unique().tolist()
+meses_disp = sorted(list(set(str(x) for x in df_full['MES_FILTRO'] if pd.notna(x))))
 mes_sel = st.sidebar.multiselect("Mês:", meses_disp, default=meses_disp)
 
-cc_disp = sorted(df_full[c_ccusto].astype(str).unique().tolist())
+# Lógica 100% blindada contra o TypeError (converte estritamente para string e remove impurezas)
+cc_disp = sorted(list(set(str(x).strip() for x in df_full[c_ccusto] if pd.notna(x) and str(x).strip() not in ['', 'nan', 'None', '<NA>'])))
 cc_sel = st.sidebar.multiselect("Centro de Custo:", cc_disp, default=cc_disp)
 
-# Aplicação dos Filtros de forma segura
+# Aplicação dos Filtros
 df_f = df_full.copy()
 if ano_sel: df_f = df_f[df_f['ANO_FILTRO'].isin(ano_sel)]
 if mes_sel: df_f = df_f[df_f['MES_FILTRO'].isin(mes_sel)]
-if cc_sel:  df_f = df_f[df_f[c_ccusto].astype(str).isin(cc_sel)]
+if cc_sel:  df_f = df_f[df_f[c_ccusto].astype(str).str.strip().isin(cc_sel)]
 
 df_sc_unicas = df_f.drop_duplicates(subset=[c_solic])
 
