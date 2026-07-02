@@ -17,7 +17,7 @@ if "cc_key" not in st.session_state: st.session_state.cc_key = 0
 # --- FUNÇÃO DO POP-UP (MODAL) ---
 @st.dialog("📋 Detalhes das Solicitações", width="large")
 def abrir_modal(df_filtrado):
-    st.write(f"**Total de solicitações únicas encontradas:** {len(df_filtrado)}")
+    st.write(f"**Total de registros encontrados:** {len(df_filtrado)}")
     st.dataframe(df_filtrado, use_container_width=True, hide_index=True)
 
 # --- CUSTOM CSS (ESTILO DARK E CARDS NEON) ---
@@ -56,71 +56,76 @@ def carregar_dados():
     df = pd.read_csv(io.StringIO(response.text))
     df.columns = df.columns.str.strip()
 
-    def find_col(keywords):
+    # BUSCA BLINDADA BASEADA NA IMAGEM
+    def get_col(exact, kw):
+        if exact in df.columns: return exact
         for col in df.columns:
-            if any(k in col.upper() for k in keywords): return col
-        return None
+            if any(k in col.upper() for k in kw): return col
+        return df.columns[0] 
 
-    # ÚNICA ALTERAÇÃO LÓGICA: Inclusão dos termos cortados da planilha ('EMISSA', 'SOLICITA', 'CRITICIDAD')
-    c_pedido = find_col(['PEDIDO', 'Nº PEDIDO'])
-    c_emissao = find_col(['EMISSAO', 'EMISSÃO', 'EMISSA'])
-    c_qtd = find_col(['QTD', 'QUANTIDADE', 'QUANTIDAC'])
-    c_ccusto = find_col(['CUSTO'])
-    c_desc = find_col(['DESC', 'DESCRICAO'])
-    c_solic = find_col(['SOLICITAÇÃO', 'SOLICITACAO', 'SOLICITA'])
-    c_crit = find_col(['CRITICIDADE', 'CRITICIDAD'])
-    c_status = find_col(['STATUS', 'SITUAÇÃO', 'SITUACAO'])
+    c_pedido = get_col('Nº Pedido', ['PEDIDO'])
+    c_emissao = get_col('DT Emissa', ['EMISSA'])
+    c_qtd = get_col('Quantidac', ['QTD', 'QUANTIDA'])
+    c_ccusto = get_col('C Custo', ['CUSTO'])
+    c_desc = get_col('Descricao', ['DESC'])
+    c_solic = get_col('Nº Solicita', ['SOLICITA'])
+    c_crit = get_col('Criticidad', ['CRITICIDAD'])
+    c_status = get_col('STATUS', ['SITUAC'])
 
     df['SLA'] = pd.to_numeric(df['SLA'], errors='coerce').fillna(0)
-    # Adicionado dayfirst=True para lidar melhor com datas BR
     df['DT_DT'] = pd.to_datetime(df[c_emissao], errors='coerce', dayfirst=True)
-    df['IS_ABERTA'] = df[c_pedido].isna() | (df[c_pedido].astype(str).str.lower() == 'nan')
-    df['Qtd_Num'] = pd.to_numeric(df[c_qtd], errors='coerce').fillna(0) if c_qtd else 0
-
+    
+    # Tratamento contra espaços em branco e nulos
+    pedidos_str = df[c_pedido].astype(str).str.strip().str.upper()
+    df['IS_ABERTA'] = pedidos_str.isin(['NAN', 'NONE', 'NULL', '', '0', '-', '<NA>'])
+    
     df['CATEGORIA_COR'] = 'ATENÇÃO'
     df.loc[~df['IS_ABERTA'], 'CATEGORIA_COR'] = 'FINALIZADO'
     df.loc[df['IS_ABERTA'] & (df['SLA'] < 10), 'CATEGORIA_COR'] = 'NO PRAZO'
     df.loc[df['IS_ABERTA'] & (df['SLA'] >= 10) & (df['SLA'] <= 15), 'CATEGORIA_COR'] = 'ATENÇÃO'
     df.loc[df['IS_ABERTA'] & (df['SLA'] > 15), 'CATEGORIA_COR'] = 'FORA DO PRAZO'
 
-    df['ANO'] = df['DT_DT'].dt.year
-    
-    # Tradução dos meses
+    # Criação de colunas de filtro seguras (não conflita com as do Excel original)
+    df['ANO_FILTRO'] = df['DT_DT'].dt.year.fillna(0).astype(int)
     mapa_meses = {
         'January': 'Janeiro', 'February': 'Fevereiro', 'March': 'Março',
         'April': 'Abril', 'May': 'Maio', 'June': 'Junho',
         'July': 'Julho', 'August': 'Agosto', 'September': 'Setembro',
         'October': 'Outubro', 'November': 'Novembro', 'December': 'Dezembro'
     }
-    df['MES_NOME'] = df['DT_DT'].dt.month_name().map(mapa_meses)
+    df['MES_FILTRO'] = df['DT_DT'].dt.month_name().map(mapa_meses).fillna('Sem Data')
     
     return df, c_pedido, c_solic, c_ccusto, c_desc, c_crit, c_emissao, c_status
 
 df_full, c_pedido, c_solic, c_ccusto, c_desc, c_crit, c_emissao, c_status = carregar_dados()
 colunas_exibir = [col for col in [c_solic, c_status, c_desc, c_ccusto, c_crit, c_emissao, 'SLA'] if col is not None]
 
-# --- FILTROS ---
+# --- FILTROS DINÂMICOS (Evita exclusão acidental de dados) ---
 st.sidebar.title("Filtros")
-anos_disp = sorted(df_full['ANO'].dropna().unique())
+anos_disp = sorted([a for a in df_full['ANO_FILTRO'].unique() if a != 0])
+if not anos_disp: anos_disp = [0]
 ano_sel = st.sidebar.multiselect("Ano:", anos_disp, default=anos_disp)
 
-meses_todos = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro']
-mes_sel = st.sidebar.multiselect("Mês:", meses_todos, default=meses_todos)
-cc_sel = st.sidebar.multiselect("Centro de Custo:", sorted(df_full[c_ccusto].dropna().unique().tolist()))
+meses_disp = df_full['MES_FILTRO'].unique().tolist()
+mes_sel = st.sidebar.multiselect("Mês:", meses_disp, default=meses_disp)
+
+cc_disp = sorted(df_full[c_ccusto].dropna().astype(str).unique().tolist())
+cc_sel = st.sidebar.multiselect("Centro de Custo:", cc_disp)
 
 df_f = df_full.copy()
-if ano_sel: df_f = df_f[df_f['ANO'].isin(ano_sel)]
-if mes_sel: df_f = df_f[df_f['MES_NOME'].isin(mes_sel)]
-if cc_sel: df_f = df_f[df_f[c_ccusto].isin(cc_sel)]
+if ano_sel: df_f = df_f[df_f['ANO_FILTRO'].isin(ano_sel)]
+if mes_sel: df_f = df_f[df_f['MES_FILTRO'].isin(mes_sel)]
+if cc_sel: df_f = df_f[df_f[c_ccusto].astype(str).isin(cc_sel)]
 df_sc_unicas = df_f.drop_duplicates(subset=[c_solic])
 
 # --- DASHBOARD ---
 st.markdown("<h3>Análise Executiva de Compras</h3>", unsafe_allow_html=True)
 
-v_pedidos = df_sc_unicas[c_pedido].nunique()
+pedidos_unicos = df_sc_unicas[c_pedido].astype(str).str.strip().str.upper()
+v_pedidos = pedidos_unicos[~pedidos_unicos.isin(['NAN', 'NONE', 'NULL', '', '0', '-', '<NA>'])].nunique()
 v_fechadas = df_sc_unicas[~df_sc_unicas['IS_ABERTA']].shape[0]
 v_abertas = df_sc_unicas[df_sc_unicas['IS_ABERTA']].shape[0]
-v_sla = round(df_sc_unicas[df_sc_unicas['IS_ABERTA']]['SLA'].mean(), 1)
+v_sla = round(df_sc_unicas[df_sc_unicas['IS_ABERTA']]['SLA'].mean(), 1) if v_abertas > 0 else 0
 
 col1, col2, col3, col4 = st.columns(4)
 col1.markdown(f'<div class="metric-card card-blue"><div class="metric-title">Pedidos Emitidos</div><div class="metric-value">{v_pedidos}</div></div>', unsafe_allow_html=True)
@@ -139,30 +144,28 @@ with c_l:
     with col_nums:
         st.write("<br>", unsafe_allow_html=True)
         if len(status_counts) > 0:
-            for status, qtd in status_counts.items(): st.metric(status, qtd)
+            for status, qtd in status_counts.items(): 
+                st.metric(status, qtd)
+                if st.button(f"🔍 Detalhes", key=f"btn_{status}"):
+                    df_detalhe = df_f[df_f['CATEGORIA_COR'] == status]
+                    st.session_state.df_modal = df_detalhe.drop_duplicates(subset=[c_solic])[colunas_exibir]
+                    st.session_state.abrir_modal = True
+                    st.rerun()
     with col_pizza:
         fig_p = go.Figure(data=[go.Pie(labels=status_counts.index, values=status_counts.values, marker=dict(colors=[CORES_STATUS.get(x, '#888') for x in status_counts.index]), textinfo='percent', textfont=dict(color='white', size=14), hole=0.4)])
         fig_p.update_layout(**dark_layout)
-        
-        # --- NOVO: CAPTURA DO CLIQUE NO GRÁFICO DE PIZZA ---
-        evento_pizza = st.plotly_chart(fig_p, use_container_width=True, on_select="rerun", config={'displayModeBar': False}, key=f"pizza_{st.session_state.pizza_key}")
-        if evento_pizza and len(evento_pizza.selection.get("points", [])) > 0:
-            status_clicado = str(evento_pizza.selection["points"][0].get("label", "")).strip()
-            df_detalhe = df_f[df_f['CATEGORIA_COR'].astype(str).str.strip() == status_clicado]
-            st.session_state.df_modal = df_detalhe.drop_duplicates(subset=[c_solic])[colunas_exibir]
-            st.session_state.abrir_modal = True
-            st.session_state.pizza_key += 1
-            st.rerun()
+        st.plotly_chart(fig_p, use_container_width=True, config={'displayModeBar': False})
 
 with c_r:
     st.markdown("#### Volume por Criticidade")
-    crit_counts = df_sc_unicas.groupby(c_crit)[c_solic].nunique().reset_index()
-    fig_c = px.bar(crit_counts, y=c_crit, x=c_solic, text_auto=True, orientation='h', color_discrete_sequence=['#0f62fe'])
-    fig_c.update_layout(**dark_layout)
-    fig_c.update_traces(textfont_size=21) 
-    fig_c.update_xaxes(visible=False) 
-    fig_c.update_yaxes(title="", tickfont=dict(size=16)) 
-    st.plotly_chart(fig_c, use_container_width=True, config={'displayModeBar': False})
+    if not df_sc_unicas.empty:
+        crit_counts = df_sc_unicas.groupby(c_crit)[c_solic].nunique().reset_index()
+        fig_c = px.bar(crit_counts, y=c_crit, x=c_solic, text_auto=True, orientation='h', color_discrete_sequence=['#0f62fe'])
+        fig_c.update_layout(**dark_layout)
+        fig_c.update_traces(textfont_size=21) 
+        fig_c.update_xaxes(visible=False) 
+        fig_c.update_yaxes(title="", tickfont=dict(size=16)) 
+        st.plotly_chart(fig_c, use_container_width=True, config={'displayModeBar': False})
 
 st.markdown("<hr style='border-color: #2b2b40;'>", unsafe_allow_html=True)
 
@@ -172,49 +175,51 @@ col_graf1, col_graf2 = st.columns(2)
 with col_graf1:
     st.markdown("#### ⚠️ Top 10 Solicitações em Aberto (Global)")
     df_abertas_global = df_full[df_full['IS_ABERTA']].copy()
-    df_abertas_global['SLA'] = pd.to_numeric(df_abertas_global['SLA'], errors='coerce').fillna(0)
-    df_top10_abertas = df_abertas_global.sort_values(by='SLA', ascending=False).drop_duplicates(subset=[c_solic]).head(10)
-    df_top10_abertas['Solicitação_Str'] = df_top10_abertas[c_solic].astype(str)
-    
-    fig_top_solic = px.bar(df_top10_abertas, x='SLA', y='Solicitação_Str', text='SLA', orientation='h', hover_data=[c_desc], color_discrete_sequence=['#e91e63'])
-    fig_top_solic.update_traces(textposition='inside', textfont_size=18, hovertemplate="<b>Solicitação:</b> %{y}<br><b>SLA:</b> %{x} dias<br><b>Item:</b> %{customdata[0]}<extra></extra>")
-    fig_top_solic.update_layout(**dark_layout)
-    fig_top_solic.update_xaxes(visible=False)
-    fig_top_solic.update_yaxes(autorange="reversed", type='category', title="", tickfont=dict(size=14))
-    
-    evento_solic = st.plotly_chart(fig_top_solic, use_container_width=True, on_select="rerun", config={'displayModeBar': False}, key=f"solic_{st.session_state.solic_key}")
-    if evento_solic and len(evento_solic.selection.get("points", [])) > 0:
-        id_clicado = str(evento_solic.selection["points"][0]["y"]).strip()
-        df_detalhe = df_full[df_full[c_solic].astype(str).str.strip() == id_clicado]
-        st.session_state.df_modal = df_detalhe.drop_duplicates(subset=[c_solic])[colunas_exibir]
-        st.session_state.abrir_modal = True
-        st.session_state.solic_key += 1
-        st.rerun()
+    if not df_abertas_global.empty:
+        df_abertas_global['SLA'] = pd.to_numeric(df_abertas_global['SLA'], errors='coerce').fillna(0)
+        df_top10_abertas = df_abertas_global.sort_values(by='SLA', ascending=False).drop_duplicates(subset=[c_solic]).head(10)
+        df_top10_abertas['Solicitação_Str'] = df_top10_abertas[c_solic].astype(str)
+        
+        fig_top_solic = px.bar(df_top10_abertas, x='SLA', y='Solicitação_Str', text='SLA', orientation='h', hover_data=[c_desc], color_discrete_sequence=['#e91e63'])
+        fig_top_solic.update_traces(textposition='inside', textfont_size=18, hovertemplate="<b>Solicitação:</b> %{y}<br><b>SLA:</b> %{x} dias<br><b>Item:</b> %{customdata[0]}<extra></extra>")
+        fig_top_solic.update_layout(**dark_layout)
+        fig_top_solic.update_xaxes(visible=False)
+        fig_top_solic.update_yaxes(autorange="reversed", type='category', title="", tickfont=dict(size=14))
+        
+        evento_solic = st.plotly_chart(fig_top_solic, use_container_width=True, on_select="rerun", config={'displayModeBar': False}, key=f"solic_{st.session_state.solic_key}")
+        if evento_solic and len(evento_solic.selection.get("points", [])) > 0:
+            id_clicado = str(evento_solic.selection["points"][0]["y"]).strip()
+            df_detalhe = df_full[df_full[c_solic].astype(str).str.strip() == id_clicado]
+            st.session_state.df_modal = df_detalhe.drop_duplicates(subset=[c_solic])[colunas_exibir]
+            st.session_state.abrir_modal = True
+            st.session_state.solic_key += 1
+            st.rerun()
 
 with col_graf2:
     st.markdown("#### 🛒 Top 10 Itens Mais Comprados (Frequência)")
     df_itens = df_f.copy()
-    desc_lower = df_itens[c_desc].astype(str).str.lower()
-    termos_excluidos = ['oleo comb diesel comum a granel', 'gasolina', 'serviço', 'servico', 'serv']
-    filtro_exclusao = ~desc_lower.str.contains('|'.join(termos_excluidos), na=False)
-    
-    top_itens = df_itens[filtro_exclusao][c_desc].value_counts().reset_index().head(10)
-    top_itens.columns = ['Item/Descrição', 'Vezes Solicitado']
-    
-    fig_top_itens = px.bar(top_itens, x='Vezes Solicitado', y='Item/Descrição', text_auto=True, orientation='h', color_discrete_sequence=['#00c853'])
-    fig_top_itens.update_layout(**dark_layout)
-    fig_top_itens.update_traces(textfont_size=18)
-    fig_top_itens.update_xaxes(visible=False)
-    fig_top_itens.update_yaxes(autorange="reversed", title="", tickfont=dict(size=14))
-    
-    evento_item = st.plotly_chart(fig_top_itens, use_container_width=True, on_select="rerun", config={'displayModeBar': False}, key=f"item_{st.session_state.item_key}")
-    if evento_item and len(evento_item.selection.get("points", [])) > 0:
-        nome_item_clicado = str(evento_item.selection["points"][0]["y"]).strip()
-        df_detalhe = df_f[df_f[c_desc].astype(str).str.strip() == nome_item_clicado]
-        st.session_state.df_modal = df_detalhe.drop_duplicates(subset=[c_solic])[colunas_exibir]
-        st.session_state.abrir_modal = True
-        st.session_state.item_key += 1
-        st.rerun()
+    if not df_itens.empty:
+        desc_lower = df_itens[c_desc].astype(str).str.lower()
+        termos_excluidos = ['oleo comb diesel comum a granel', 'gasolina', 'serviço', 'servico', 'serv']
+        filtro_exclusao = ~desc_lower.str.contains('|'.join(termos_excluidos), na=False)
+        
+        top_itens = df_itens[filtro_exclusao][c_desc].value_counts().reset_index().head(10)
+        top_itens.columns = ['Item/Descrição', 'Vezes Solicitado']
+        
+        fig_top_itens = px.bar(top_itens, x='Vezes Solicitado', y='Item/Descrição', text_auto=True, orientation='h', color_discrete_sequence=['#00c853'])
+        fig_top_itens.update_layout(**dark_layout)
+        fig_top_itens.update_traces(textfont_size=18)
+        fig_top_itens.update_xaxes(visible=False)
+        fig_top_itens.update_yaxes(autorange="reversed", title="", tickfont=dict(size=14))
+        
+        evento_item = st.plotly_chart(fig_top_itens, use_container_width=True, on_select="rerun", config={'displayModeBar': False}, key=f"item_{st.session_state.item_key}")
+        if evento_item and len(evento_item.selection.get("points", [])) > 0:
+            nome_item_clicado = str(evento_item.selection["points"][0]["y"]).strip()
+            df_detalhe = df_f[df_f[c_desc].astype(str).str.strip() == nome_item_clicado]
+            st.session_state.df_modal = df_detalhe.drop_duplicates(subset=[c_solic])[colunas_exibir]
+            st.session_state.abrir_modal = True
+            st.session_state.item_key += 1
+            st.rerun()
 
 st.markdown("<hr style='border-color: #2b2b40;'>", unsafe_allow_html=True)
 
@@ -265,7 +270,7 @@ if not df_cc_abertas.empty:
 else:
     st.write("Sem registros abertos.")
 
-# --- GERENCIADOR DE MODAL CENTRALIZADO (DESMARCAÇÃO AUTOMÁTICA) ---
+# --- GERENCIADOR DE MODAL CENTRALIZADO ---
 if st.session_state.get("abrir_modal", False):
     abrir_modal(st.session_state.df_modal)
     st.session_state.abrir_modal = False
